@@ -18,12 +18,16 @@ die()  { echo -e "${RED}✗${NC} $1" >&2; exit 1; }
 # ── Defaults (overridable via env) ──────────
 GH_USER="${GH_USER:-ManuelKugelmann}"
 GH_REPO="${GH_REPO:-TradingAssistant}"
-STACK_DIR="${STACK_DIR:-$HOME/mcp-signals-stack}"
+STACK_DIR="${STACK_DIR:-$HOME/mcps}"
 APP_DIR="${APP_DIR:-$HOME/LibreChat}"
 DATA_DIR="${DATA_DIR:-$HOME/librechat-data}"
 LC_PORT="${LC_PORT:-3080}"
 NODE_VERSION="${NODE_VERSION:-22}"
 BRANCH="${BRANCH:-main}"
+
+# Track whether .env files are new (need editing)
+NEED_STACK_ENV=false
+NEED_APP_ENV=false
 
 echo -e "${CYAN}══════════════════════════════════════════${NC}"
 echo -e "${CYAN} TradingAssistant + LibreChat → Uberspace ${NC}"
@@ -42,15 +46,15 @@ uberspace tools version use node "$NODE_VERSION" 2>/dev/null || true
 command -v node &>/dev/null || die "Node.js not available"
 log "Node.js $(node -v)"
 
-# ── 2. Clone or update signals stack ────────
+# ── 2. Clone or update repo ─────────────────
 if [[ -d "$STACK_DIR/.git" ]]; then
-    log "Signals stack exists, pulling latest..."
+    log "Repo exists at $STACK_DIR, pulling latest..."
     git -C "$STACK_DIR" pull --ff-only origin "$BRANCH" 2>/dev/null || \
         git -C "$STACK_DIR" fetch origin "$BRANCH" && \
         git -C "$STACK_DIR" reset --hard "origin/$BRANCH"
-    log "Signals stack updated"
+    log "Repo updated"
 else
-    log "Cloning signals stack..."
+    log "Cloning repo..."
     if [[ -n "${GH_TOKEN:-}" ]]; then
         git clone -b "$BRANCH" "https://${GH_TOKEN}@github.com/${GH_USER}/${GH_REPO}.git" "$STACK_DIR"
     else
@@ -76,7 +80,8 @@ log "Python venv ready"
 # ── 4. Signals stack .env ───────────────────
 if [[ ! -f "$STACK_DIR/.env" ]]; then
     cp "$STACK_DIR/.env.example" "$STACK_DIR/.env"
-    warn "Created $STACK_DIR/.env — edit with your MONGO_URI and API keys"
+    NEED_STACK_ENV=true
+    log "Created $STACK_DIR/.env (needs configuration)"
 else
     log "Signals .env already exists"
 fi
@@ -117,6 +122,7 @@ if [[ -d "$APP" ]] && [[ -f "$APP/.version" ]]; then
     log "LibreChat already installed ($(cat "$APP/.version"))"
 else
     NEED_LC_SETUP=true
+    NEED_APP_ENV=true
     TMP=$(mktemp -d)
     trap "rm -rf $TMP" EXIT
 
@@ -188,23 +194,62 @@ supervisorctl reread 2>/dev/null || true
 supervisorctl update 2>/dev/null || true
 
 # ── Done ────────────────────────────────────
+UBER="${UBER_HOST:-$(hostname -f 2>/dev/null || echo "$USER.uber.space")}"
 echo ""
 echo -e "${CYAN}══════════════════════════════════════════${NC}"
 echo -e "${GREEN}✓${NC} Installation complete!"
 echo -e "${CYAN}══════════════════════════════════════════${NC}"
 echo ""
-echo -e "  ${YELLOW}Configure (if first run):${NC}"
-echo "    nano $STACK_DIR/.env       # MONGO_URI + API keys for signals"
-echo "    nano $APP/.env             # MONGO_URI + LLM keys for LibreChat"
-echo ""
-echo -e "  ${YELLOW}Start:${NC}"
+
+# ── Interactive config if .env files are new ─
+if [[ "$NEED_STACK_ENV" == true ]] || [[ "$NEED_APP_ENV" == true ]]; then
+    echo -e "${YELLOW}New .env files were created and need your API keys.${NC}"
+    echo ""
+
+    if [[ -t 0 ]]; then
+        # Interactive terminal — offer to open nano
+        if [[ "$NEED_STACK_ENV" == true ]]; then
+            echo -e "${CYAN}[1/2]${NC} Signals stack config — set MONGO_URI_SIGNALS (optional API keys)"
+            echo -e "      ${YELLOW}$STACK_DIR/.env${NC}"
+            read -rp "      Open in nano now? [Y/n] " ans
+            if [[ "${ans:-Y}" =~ ^[Yy]?$ ]]; then
+                nano "$STACK_DIR/.env"
+            fi
+            echo ""
+        fi
+
+        if [[ "$NEED_APP_ENV" == true ]]; then
+            echo -e "${CYAN}[2/2]${NC} LibreChat config — set MONGO_URI + LLM API key(s)"
+            echo -e "      ${YELLOW}$APP/.env${NC}"
+            read -rp "      Open in nano now? [Y/n] " ans
+            if [[ "${ans:-Y}" =~ ^[Yy]?$ ]]; then
+                nano "$APP/.env"
+            fi
+            echo ""
+        fi
+    else
+        # Piped (curl|bash) — can't do interactive nano, print instructions
+        echo -e "  ${CYAN}Step 1:${NC} Configure signals stack"
+        echo "    nano $STACK_DIR/.env"
+        echo "    # Set MONGO_URI_SIGNALS=mongodb+srv://... (optional API keys)"
+        echo ""
+        echo -e "  ${CYAN}Step 2:${NC} Configure LibreChat"
+        echo "    nano $APP/.env"
+        echo "    # Set MONGO_URI=mongodb+srv://..."
+        echo "    # Set ANTHROPIC_API_KEY=sk-ant-...  and/or  OPENAI_API_KEY=sk-..."
+        echo ""
+    fi
+fi
+
+echo -e "  ${CYAN}Start:${NC}"
 echo "    supervisorctl start librechat"
 echo "    supervisorctl start mcp-store"
 echo ""
-echo -e "  ${YELLOW}Access:${NC}"
-echo "    https://${UBER_HOST:-$(hostname -f 2>/dev/null || echo "$USER.uber.space")}"
+echo -e "  ${CYAN}Access:${NC}"
+echo "    https://${UBER}"
+echo "    (first user to register becomes admin)"
 echo ""
-echo -e "  ${YELLOW}Ops:${NC}"
+echo -e "  ${CYAN}Ops:${NC}"
 echo "    lc help                    # all commands"
 echo "    lc pull                    # quick git-pull update (dev)"
 echo "    lc u                       # release update (prod)"

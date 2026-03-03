@@ -5,7 +5,7 @@ set -euo pipefail
 
 # ── Load central config ──
 for conf in "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/deploy.conf" \
-            "$HOME/mcp-signals-stack/deploy.conf"; do
+            "$HOME/mcps/deploy.conf"; do
     [[ -f "$conf" ]] && { source "$conf"; break; }
 done
 
@@ -14,7 +14,7 @@ VER="${2:-unknown}"
 APP="${APP_DIR:-$HOME/LibreChat}"
 BAK="${APP}.prev"
 DATA="${DATA_DIR:-$HOME/librechat-data}"
-STACK="${STACK_DIR:-$HOME/mcp-signals-stack}"
+STACK="${STACK_DIR:-$HOME/mcps}"
 SVC="$HOME/etc/services.d/librechat.ini"
 PORT="${LC_PORT:-3080}"
 

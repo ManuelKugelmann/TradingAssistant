@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # ── Load central config ──
-STACK="${HOME}/mcp-signals-stack"
+STACK="${HOME}/mcps"
 for conf in "$STACK/deploy.conf" \
             "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)/deploy.conf"; do
     [[ -f "$conf" ]] && { source "$conf"; break; }

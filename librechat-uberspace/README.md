@@ -41,7 +41,7 @@ cat deploy.conf
 | `GH_USER` | `ManuelKugelmann` | GitHub username |
 | `GH_REPO_STACK` | `TradingAssistant` | Signals stack repo |
 | `GH_REPO_DATA` | `librechat-data` | Data repo (private) |
-| `STACK_DIR` | `$HOME/mcp-signals-stack` | Signals stack path |
+| `STACK_DIR` | `$HOME/mcps` | Signals stack path |
 | `APP_DIR` | `$HOME/LibreChat` | LibreChat path |
 | `DATA_DIR` | `$HOME/librechat-data` | MCP data path |
 | `LC_PORT` | `3080` | LibreChat port |
@@ -85,7 +85,7 @@ For private repos: `curl -sL ... | GH_TOKEN=ghp_xxx bash`
 
 ```bash
 # Signals stack
-nano ~/mcp-signals-stack/.env
+nano ~/mcps/.env
 # Set MONGO_URI (for signals database)
 
 # LibreChat
@@ -134,7 +134,7 @@ bash ~/LibreChat/scripts/setup-data-repo.sh
 | `memory` | Knowledge graph | `~/librechat-data/memory.jsonl` |
 | `sqlite` | Structured data | `~/librechat-data/data.db` |
 
-### Trading Signals Stack (requires `~/mcp-signals-stack/`)
+### Trading Signals Stack (requires `~/mcps/`)
 
 | MCP Server | Domain | Key Sources |
 |---|---|---|

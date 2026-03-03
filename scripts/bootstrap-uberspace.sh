@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONF="${SCRIPT_DIR}/../deploy.conf"
 [[ -f "$CONF" ]] && source "$CONF"
 
-echo "🚀 MCP Signals Stack — Uberspace Bootstrap"
+echo "🚀 MCP Servers — Uberspace Bootstrap"
 echo "   Host: ${UBER_HOST:-$(hostname -f)}"
 echo "   Install dir: $STACK_DIR"
 

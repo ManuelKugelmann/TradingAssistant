@@ -42,7 +42,7 @@ ssh assist@assist.uber.space
 curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/install.sh | bash
 ```
 
-Then configure: `nano ~/mcp-signals-stack/.env` and `nano ~/LibreChat/.env`, then `supervisorctl start librechat`.
+Then configure: `nano ~/mcps/.env` and `nano ~/LibreChat/.env`, then `supervisorctl start librechat`.
 
 Re-run safe — skips what's already done, preserves `.env` and config.
 
