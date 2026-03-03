@@ -70,51 +70,27 @@ Override any value via environment: `UBER_USER=other ./scripts/bootstrap-uberspa
    mongodb+srv://youruser:yourpass@cluster0.xxxxx.mongodb.net/LibreChat
    ```
 
-### Step 2: Deploy to Uberspace (10 min)
+### Step 2: Deploy to Uberspace (one-liner)
 
 ```bash
-# SSH into your Uberspace
 ssh assist@assist.uber.space
-
-# Set Node.js 22
-uberspace tools version use node 22
-
-# Clone the signals stack
-git clone https://github.com/ManuelKugelmann/TradingAssistant.git ~/mcp-signals-stack
-cd ~/mcp-signals-stack
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-
-# Configure signals stack
-cp .env.example .env
-nano .env
-# Set MONGO_URI to your Atlas connection string (database: signals)
-
-# Install LibreChat via bootstrap (if release exists)
-bash ~/mcp-signals-stack/librechat-uberspace/scripts/bootstrap.sh
-
-# OR install manually (no CI release needed):
-APP="$HOME/LibreChat"
-mkdir -p "$APP/config" "$APP/scripts"
-cp ~/mcp-signals-stack/librechat-uberspace/config/librechat.yaml "$APP/config/"
-cp ~/mcp-signals-stack/librechat-uberspace/config/.env.example "$APP/config/"
-cp ~/mcp-signals-stack/librechat-uberspace/scripts/*.sh "$APP/scripts/"
-bash "$APP/scripts/setup.sh" "$APP" "v0.1.0-manual"
+curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/install.sh | bash
 ```
+
+This clones the repo, creates Python venv, installs LibreChat (from release or repo), registers all supervisord services, and sets up the `lc` command. Re-run safe.
+
+For private repos: `curl -sL ... | GH_TOKEN=ghp_xxx bash`
 
 ### Step 3: Configure (2 min)
 
 ```bash
-# Edit LibreChat environment
+# Signals stack
+nano ~/mcp-signals-stack/.env
+# Set MONGO_URI (for signals database)
+
+# LibreChat
 nano ~/LibreChat/.env
-
-# Required — fill these in:
-#   MONGO_URI=mongodb+srv://...
-#   ANTHROPIC_API_KEY=sk-ant-...  (or OPENAI_API_KEY=sk-...)
-
-# Verify MCP paths were patched (should show your home dir, not __HOME__)
-grep __HOME__ ~/LibreChat/librechat.yaml
-# (should return nothing — if it does, run: sed -i "s|__HOME__|$HOME|g" ~/LibreChat/librechat.yaml)
+# Set MONGO_URI + at least one LLM key (ANTHROPIC_API_KEY or OPENAI_API_KEY)
 ```
 
 ### Step 4: Start (1 min)
@@ -185,7 +161,9 @@ lc s          # status + version + host
 lc l          # tail logs
 lc r          # restart
 lc v          # show version
-lc u          # update (pull latest release)
+lc u          # update from latest GitHub release
+lc pull       # quick update via git pull (dev)
+lc install    # re-run full installer (idempotent)
 lc rb         # rollback to previous version
 lc sync       # force git sync of data
 lc env        # edit .env
@@ -195,14 +173,20 @@ lc conf       # edit deploy.conf
 
 ## Updates
 
-```bash
-# Via CI release (tag → build → deploy):
-git tag v0.2.0 && git push --tags
-# Then on Uberspace:
-lc u
+| Method | Command | Use when |
+|--------|---------|----------|
+| Release | `lc u` | Production — downloads tagged release bundle |
+| Git pull | `lc pull` | Dev/testing — fast, no release needed |
+| Re-install | `lc install` | Full re-setup (idempotent, preserves config) |
 
-# Or re-run bootstrap:
-bash ~/mcp-signals-stack/librechat-uberspace/scripts/bootstrap.sh
+```bash
+# Production: tag → CI builds bundle → deploy
+git tag v0.2.0 && git push --tags   # from dev machine
+lc u                                  # on Uberspace
+
+# Dev: push to main → quick pull on server
+git push                              # from dev machine
+lc pull                               # on Uberspace (git pull + restart)
 ```
 
 ## Rollback

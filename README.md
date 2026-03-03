@@ -35,26 +35,26 @@
 | ☁️ Atlas M0 | Time-series snapshots, events | Documents with TTL auto-prune | Hourly → quarterly |
 | 🔌 MCP sources | Live current data | API queries on demand | Real-time |
 
-## Quick Start
+## Deploy to Uberspace (one-liner)
 
 ```bash
-# 1. Clone
+ssh assist@assist.uber.space
+curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/install.sh | bash
+```
+
+Then configure: `nano ~/mcp-signals-stack/.env` and `nano ~/LibreChat/.env`, then `supervisorctl start librechat`.
+
+Re-run safe — skips what's already done, preserves `.env` and config.
+
+## Quick Start (local dev)
+
+```bash
 git clone https://github.com/ManuelKugelmann/TradingAssistant.git
 cd TradingAssistant
-
-# 2. Setup Python env
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-
-# 3. Configure
-cp .env.example .env
-# Edit .env with your MONGO_URI and API keys
-
-# 4. Run signals store
+cp .env.example .env   # edit with MONGO_URI + API keys
 python src/store/server.py
-
-# 5. Run a domain server
-python src/servers/weather_server.py
 ```
 
 ## Central Configuration
@@ -75,6 +75,7 @@ Override via environment: `UBER_USER=other ./scripts/bootstrap-uberspace.sh`
 ```
 ├── README.md
 ├── TODO.md                           ← Project roadmap & tasks
+├── install.sh                        ← One-liner Uberspace install (idempotent)
 ├── deploy.conf                       ← Central config (all scripts source this)
 ├── .env.example                      ← Signals stack env vars
 ├── .gitignore
@@ -167,9 +168,14 @@ Override via environment: `UBER_USER=other ./scripts/bootstrap-uberspace.sh`
 
 Default target: **assist.uber.space** (Uberspace.de, ~5 EUR/mo). No Docker, no root, no GPU.
 
-Available: Node.js 22, Python 3, supervisord, ~1.5 GB RAM, outbound HTTP.
+| Method | Command | When |
+|--------|---------|------|
+| One-liner | `curl -sL .../install.sh \| bash` | First install or full re-setup |
+| Release update | `lc u` | Production updates from tagged releases |
+| Git pull | `lc pull` | Quick dev testing, no release needed |
+| Re-install | `lc install` | Re-run installer (idempotent) |
 
-See `librechat-uberspace/README.md` for the full QuickStart, and `docs/uberspace-deployment.md` for the signals stack guide.
+See `librechat-uberspace/README.md` for detailed setup.
 
 ## License
 

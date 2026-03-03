@@ -25,11 +25,12 @@ jobs:
           mkdir -p bundle/config bundle/scripts
 
           # Copy LibreChat deployment files
-          cp librechat-uberspace/config/librechat.yaml bundle/config/
-          cp librechat-uberspace/config/.env.example  bundle/config/
-          cp librechat-uberspace/scripts/setup.sh     bundle/scripts/
-          cp librechat-uberspace/scripts/bootstrap.sh bundle/scripts/
-          cp librechat-uberspace/scripts/lc.sh        bundle/scripts/
+          cp deploy.conf                                bundle/
+          cp librechat-uberspace/config/librechat.yaml  bundle/config/
+          cp librechat-uberspace/config/.env.example    bundle/config/
+          cp librechat-uberspace/scripts/setup.sh       bundle/scripts/
+          cp librechat-uberspace/scripts/bootstrap.sh   bundle/scripts/
+          cp librechat-uberspace/scripts/lc.sh          bundle/scripts/
           cp librechat-uberspace/scripts/setup-data-repo.sh bundle/scripts/
 
           # Pre-install MCP Node packages into bundle
@@ -50,5 +51,5 @@ jobs:
         with:
           files: |
             librechat-bundle.tar.gz
-            librechat-uberspace/scripts/bootstrap.sh
+            install.sh
           generate_release_notes: true
