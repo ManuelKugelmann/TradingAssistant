@@ -160,8 +160,6 @@ python-dotenv>=1.0
 ### First Deploy (one-liner)
 ```bash
 curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
-# Private repos:
-curl -sL ... | GH_TOKEN=ghp_xxx bash
 ```
 Auto-detects fresh install (no repo cloned → runs `install`). Clones repo, creates venv, registers services, installs LibreChat (release bundle or repo fallback), sets up `ta` shortcut. Re-run safe via `ta install`.
 

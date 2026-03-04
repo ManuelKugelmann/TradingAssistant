@@ -53,7 +53,6 @@ Go to **Settings → Secrets and variables → Actions** and add:
 | `UBERSPACE_HOST` | `yourname.uber.space` | For auto-deploy |
 | `UBERSPACE_USER` | Your SSH username | For auto-deploy |
 | `UBERSPACE_SSH_KEY` | Private SSH key (entire file content) | For auto-deploy |
-| `GH_DEPLOY_TOKEN` | GitHub PAT with `repo` scope | For private repos |
 
 Auto-deploy is optional — you can also manually run `bootstrap.sh` on Uberspace.
 
@@ -140,9 +139,6 @@ Or trigger manually: **Actions → Build & Release → Run workflow**
 ```bash
 # Set repo (required)
 export LIBRECHAT_REPO="YOUR_USER/librechat-uberspace"
-
-# For private repos:
-export GH_TOKEN="ghp_xxxxxxxxxxxx"
 
 # Run bootstrap
 curl -sL "https://github.com/$LIBRECHAT_REPO/releases/latest/download/bootstrap.sh" | bash
@@ -408,7 +404,7 @@ uberspace web backend set / --http --port 3080
 |---|---|
 | Uberspace | ~5€/mo (pay what you want, min 1€) |
 | MongoDB Atlas M0 | Free (512 MB) |
-| GitHub (private repos) | Free |
+| GitHub | Free |
 | Cloud LLM APIs | Per-use |
 | **Total infrastructure** | **~5€/mo** |
 

@@ -60,9 +60,7 @@ _do_install() {
     echo ""
 
     gh_curl() {
-        local args=(-sf)
-        [[ -n "${GH_TOKEN:-}" ]] && args+=(-H "Authorization: token $GH_TOKEN")
-        curl "${args[@]}" "$@"
+        curl -sf "$@"
     }
 
     # ── 1. Node.js ──────────────────────────────
@@ -80,11 +78,7 @@ _do_install() {
         log "Repo updated"
     else
         log "Cloning repo..."
-        if [[ -n "${GH_TOKEN:-}" ]]; then
-            git clone -b "$BRANCH" "https://${GH_TOKEN}@github.com/${GH_USER}/${GH_REPO}.git" "$STACK"
-        else
-            git clone -b "$BRANCH" "https://github.com/${GH_USER}/${GH_REPO}.git" "$STACK"
-        fi
+        git clone -b "$BRANCH" "https://github.com/${GH_USER}/${GH_REPO}.git" "$STACK"
         log "Cloned → $STACK"
     fi
 
