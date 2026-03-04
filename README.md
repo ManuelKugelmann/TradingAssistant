@@ -39,7 +39,7 @@
 
 ```bash
 ssh assist@assist.uber.space
-curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
 ```
 
 Then configure: `nano ~/mcps/.env` and `nano ~/LibreChat/.env`, then `supervisorctl start librechat`.
@@ -75,7 +75,6 @@ Override via environment: `UBER_USER=other ./scripts/bootstrap-uberspace.sh`
 ```
 ├── README.md
 ├── TODO.md                           ← Project roadmap & tasks
-├── install.sh                        ← One-liner Uberspace install (idempotent)
 ├── deploy.conf                       ← Central config (all scripts source this)
 ├── .env.example                      ← Signals stack env vars
 ├── .gitignore
@@ -133,7 +132,7 @@ Override via environment: `UBER_USER=other ./scripts/bootstrap-uberspace.sh`
     │   └── .env.example              ← LibreChat env vars
     └── scripts/
         ├── bootstrap.sh
-        ├── lc.sh
+        ├── TradeAssistant.sh
         ├── setup.sh
         └── setup-data-repo.sh
 ```
@@ -170,10 +169,10 @@ Default target: **assist.uber.space** (Uberspace.de, ~5 EUR/mo). No Docker, no r
 
 | Method | Command | When |
 |--------|---------|------|
-| One-liner | `curl -sL .../install.sh \| bash` | First install or full re-setup |
-| Release update | `lc u` | Production updates from tagged releases |
-| Git pull | `lc pull` | Quick dev testing, no release needed |
-| Re-install | `lc install` | Re-run installer (idempotent) |
+| One-liner | `curl -sL .../TradeAssistant.sh \| bash` | First install or full re-setup |
+| Release update | `ta u` | Production updates from tagged releases |
+| Git pull | `ta pull` | Quick dev testing, no release needed |
+| Re-install | `ta install` | Re-run installer (idempotent) |
 
 See `librechat-uberspace/README.md` for detailed setup.
 

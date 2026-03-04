@@ -30,7 +30,7 @@ jobs:
           cp librechat-uberspace/config/.env.example    bundle/config/
           cp librechat-uberspace/scripts/setup.sh       bundle/scripts/
           cp librechat-uberspace/scripts/bootstrap.sh   bundle/scripts/
-          cp librechat-uberspace/scripts/lc.sh          bundle/scripts/
+          cp librechat-uberspace/scripts/TradeAssistant.sh bundle/scripts/
           cp librechat-uberspace/scripts/setup-data-repo.sh bundle/scripts/
 
           # Pre-install MCP Node packages into bundle

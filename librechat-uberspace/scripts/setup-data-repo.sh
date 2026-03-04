@@ -1,6 +1,6 @@
 #!/bin/bash
 # Set up git-versioned data directory for MCP file/memory/sqlite storage
-# Usage: bash setup-data-repo.sh [YOUR_USER/librechat-data]
+# Usage: bash setup-data-repo.sh [YOUR_USER/TradeAssistant_Data]
 set -euo pipefail
 
 # ── Load central config ──
@@ -9,8 +9,8 @@ for conf in "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/deploy.conf" \
     [[ -f "$conf" ]] && { source "$conf"; break; }
 done
 
-REPO="${1:-${GH_USER:-ManuelKugelmann}/${GH_REPO_DATA:-librechat-data}}"
-DATA="${DATA_DIR:-$HOME/librechat-data}"
+REPO="${1:-${GH_USER:-ManuelKugelmann}/${GH_REPO_DATA:-TradeAssistant_Data}}"
+DATA="${DATA_DIR:-$HOME/TradeAssistant_Data}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()  { echo -e "${GREEN}✓${NC} $1"; }
@@ -78,7 +78,7 @@ fi
 
 if [[ ! -f "$DATA/README.md" ]]; then
     cat > "$DATA/README.md" <<EOF
-# LibreChat Data
+# TradeAssistant Data
 
 Git-versioned data store for LibreChat MCP servers on ${UBER_HOST:-Uberspace}.
 
@@ -103,9 +103,9 @@ fi
 cd - >/dev/null
 
 # ── Cron for auto-sync ─────────────────────
-CRON_CMD="cd $DATA && git add -A && git diff --cached --quiet || (git commit -m \"sync \$(date -Is)\" && git push) 2>&1 | logger -t librechat-data-sync"
+CRON_CMD="cd $DATA && git add -A && git diff --cached --quiet || (git commit -m \"sync \$(date -Is)\" && git push) 2>&1 | logger -t ta-data-sync"
 
-if crontab -l 2>/dev/null | grep -q "librechat-data-sync"; then
+if crontab -l 2>/dev/null | grep -q "ta-data-sync"; then
     log "Cron sync already configured"
 else
     (crontab -l 2>/dev/null; echo "*/15 * * * * $CRON_CMD") | crontab -

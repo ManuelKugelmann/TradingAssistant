@@ -13,7 +13,7 @@ SRC="${1:?Usage: setup.sh <app-dir> <version>}"
 VER="${2:-unknown}"
 APP="${APP_DIR:-$HOME/LibreChat}"
 BAK="${APP}.prev"
-DATA="${DATA_DIR:-$HOME/librechat-data}"
+DATA="${DATA_DIR:-$HOME/TradeAssistant_Data}"
 STACK="${STACK_DIR:-$HOME/mcps}"
 SVC="$HOME/etc/services.d/librechat.ini"
 PORT="${LC_PORT:-3080}"
@@ -158,8 +158,9 @@ EOF
 
     # Install ops shortcut
     mkdir -p "$HOME/bin"
-    cp "$APP/scripts/lc.sh" "$HOME/bin/lc" 2>/dev/null || true
-    chmod +x "$HOME/bin/lc" 2>/dev/null || true
+    cp "$APP/scripts/TradeAssistant.sh" "$HOME/bin/ta" 2>/dev/null || true
+    chmod +x "$HOME/bin/ta" 2>/dev/null || true
+    ln -sf "$HOME/bin/ta" "$HOME/bin/TradeAssistant" 2>/dev/null || true
 
     echo ""
     log "Installed ${VER}"
@@ -178,7 +179,7 @@ EOF
     echo "     nano $APP/librechat.yaml"
     echo ""
     echo -e "  ${YELLOW}3.${NC} Set up git-versioned data (optional):"
-    echo "     bash $APP/scripts/setup-data-repo.sh ${GH_USER:-YOUR_USER}/${GH_REPO_DATA:-librechat-data}"
+    echo "     bash $APP/scripts/setup-data-repo.sh ${GH_USER:-YOUR_USER}/${GH_REPO_DATA:-TradeAssistant_Data}"
     echo ""
     echo -e "  ${YELLOW}4.${NC} Start:"
     echo "     supervisorctl start librechat"
