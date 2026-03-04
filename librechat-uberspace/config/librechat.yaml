@@ -11,7 +11,7 @@ interface:
   endpointsMenu: true
 
 # ── MCP Servers ─────────────────────────────
-# Utility MCPs: data stored under ~/librechat-data/ (git-versioned)
+# Utility MCPs: data stored under ~/TradeAssistant_Data/ (git-versioned)
 # Trading MCPs: signals stack under ~/mcps/
 #
 # IMPORTANT: setup.sh replaces __HOME__ with your actual $HOME path.
@@ -25,7 +25,7 @@ mcpServers:
     args:
       - -y
       - "@modelcontextprotocol/server-filesystem"
-      - __HOME__/librechat-data/files/
+      - __HOME__/TradeAssistant_Data/files/
     serverInstructions: |
       Filesystem for persistent file storage.
       Use for documents, research exports, CSV files, reports.
@@ -37,7 +37,7 @@ mcpServers:
       - -y
       - "@modelcontextprotocol/server-memory"
     env:
-      MEMORY_FILE_PATH: __HOME__/librechat-data/memory.jsonl
+      MEMORY_FILE_PATH: __HOME__/TradeAssistant_Data/memory.jsonl
     serverInstructions: |
       Persistent memory as a knowledge graph.
       Store entities (people, projects, preferences) and their relations.
@@ -48,7 +48,7 @@ mcpServers:
     args:
       - -y
       - mcp-sqlite
-      - __HOME__/librechat-data/data.db
+      - __HOME__/TradeAssistant_Data/data.db
     serverInstructions: |
       SQLite database for structured data.
       Use for logs, research results, structured notes, transaction records.

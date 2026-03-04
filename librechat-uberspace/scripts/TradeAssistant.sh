@@ -1,5 +1,6 @@
 #!/bin/bash
-# LibreChat ops shortcuts — usage: lc [command]
+# TradeAssistant ops — usage: ta [command]
+# Installed as ~/bin/ta (shorthand) and ~/bin/TradeAssistant
 set -euo pipefail
 
 # ── Load central config ──
@@ -10,7 +11,7 @@ for conf in "$STACK/deploy.conf" \
 done
 
 APP="${APP_DIR:-$HOME/LibreChat}"
-DATA="${DATA_DIR:-$HOME/librechat-data}"
+DATA="${DATA_DIR:-$HOME/TradeAssistant_Data}"
 STACK="${STACK_DIR:-$STACK}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -50,9 +51,10 @@ case "${1:-help}" in
             sed -i "s|__HOME__|$HOME|g" "$APP/librechat.yaml"
         fi
 
-        # Update lc shortcut
-        cp "$STACK/librechat-uberspace/scripts/lc.sh" "$HOME/bin/lc" 2>/dev/null || true
-        chmod +x "$HOME/bin/lc" 2>/dev/null || true
+        # Update ta/TradeAssistant shortcuts
+        cp "$STACK/librechat-uberspace/scripts/TradeAssistant.sh" "$HOME/bin/ta" 2>/dev/null || true
+        chmod +x "$HOME/bin/ta" 2>/dev/null || true
+        ln -sf "$HOME/bin/ta" "$HOME/bin/TradeAssistant" 2>/dev/null || true
 
         # Update Python deps if changed
         "$STACK/venv/bin/pip" install -q -r "$STACK/requirements.txt" 2>/dev/null || true
@@ -101,22 +103,22 @@ case "${1:-help}" in
         ${EDITOR:-nano} "$STACK/deploy.conf"
         ;;
     *)
-        echo -e "${CYAN}LibreChat Lite — ops shortcuts${NC}"
+        echo -e "${CYAN}TradeAssistant — ops shortcuts${NC}"
         echo -e "${CYAN}Host: ${UBER_HOST:-$(hostname -f 2>/dev/null || echo 'unknown')}${NC}"
         echo ""
-        echo "  lc s|status     Show service status + version"
-        echo "  lc r|restart    Restart LibreChat"
-        echo "  lc l|logs       Tail service logs"
-        echo "  lc v|version    Show installed version"
+        echo "  ta s|status     Show service status + version"
+        echo "  ta r|restart    Restart LibreChat"
+        echo "  ta l|logs       Tail service logs"
+        echo "  ta v|version    Show installed version"
         echo ""
-        echo "  lc u|update     Update from latest GitHub release"
-        echo "  lc pull         Quick update via git pull (dev)"
-        echo "  lc install      Re-run full installer (idempotent)"
-        echo "  lc rb|rollback  Rollback to previous version"
+        echo "  ta u|update     Update from latest GitHub release"
+        echo "  ta pull         Quick update via git pull (dev)"
+        echo "  ta install      Re-run full installer (idempotent)"
+        echo "  ta rb|rollback  Rollback to previous version"
         echo ""
-        echo "  lc sync         Force git sync of data dir"
-        echo "  lc env          Edit .env"
-        echo "  lc yaml         Edit librechat.yaml"
-        echo "  lc conf         Edit deploy.conf"
+        echo "  ta sync         Force git sync of data dir"
+        echo "  ta env          Edit .env"
+        echo "  ta yaml         Edit librechat.yaml"
+        echo "  ta conf         Edit deploy.conf"
         ;;
 esac

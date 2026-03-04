@@ -133,7 +133,7 @@ Override via environment: `UBER_USER=other ./scripts/bootstrap-uberspace.sh`
     │   └── .env.example              ← LibreChat env vars
     └── scripts/
         ├── bootstrap.sh
-        ├── lc.sh
+        ├── TradeAssistant.sh
         ├── setup.sh
         └── setup-data-repo.sh
 ```
@@ -171,9 +171,9 @@ Default target: **assist.uber.space** (Uberspace.de, ~5 EUR/mo). No Docker, no r
 | Method | Command | When |
 |--------|---------|------|
 | One-liner | `curl -sL .../install.sh \| bash` | First install or full re-setup |
-| Release update | `lc u` | Production updates from tagged releases |
-| Git pull | `lc pull` | Quick dev testing, no release needed |
-| Re-install | `lc install` | Re-run installer (idempotent) |
+| Release update | `ta u` | Production updates from tagged releases |
+| Git pull | `ta pull` | Quick dev testing, no release needed |
+| Re-install | `ta install` | Re-run installer (idempotent) |
 
 See `librechat-uberspace/README.md` for detailed setup.
 

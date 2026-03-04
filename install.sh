@@ -20,7 +20,7 @@ GH_USER="${GH_USER:-ManuelKugelmann}"
 GH_REPO="${GH_REPO:-TradingAssistant}"
 STACK_DIR="${STACK_DIR:-$HOME/mcps}"
 APP_DIR="${APP_DIR:-$HOME/LibreChat}"
-DATA_DIR="${DATA_DIR:-$HOME/librechat-data}"
+DATA_DIR="${DATA_DIR:-$HOME/TradeAssistant_Data}"
 LC_PORT="${LC_PORT:-3080}"
 NODE_VERSION="${NODE_VERSION:-22}"
 BRANCH="${BRANCH:-main}"
@@ -149,7 +149,7 @@ else
         cp "$STACK_DIR/librechat-uberspace/config/.env.example"    "$SRC/config/"
         cp "$STACK_DIR/librechat-uberspace/scripts/setup.sh"       "$SRC/scripts/"
         cp "$STACK_DIR/librechat-uberspace/scripts/bootstrap.sh"   "$SRC/scripts/"
-        cp "$STACK_DIR/librechat-uberspace/scripts/lc.sh"          "$SRC/scripts/"
+        cp "$STACK_DIR/librechat-uberspace/scripts/TradeAssistant.sh" "$SRC/scripts/"
         cp "$STACK_DIR/librechat-uberspace/scripts/setup-data-repo.sh" "$SRC/scripts/"
     fi
 fi
@@ -179,10 +179,11 @@ EOF
     fi
     uberspace web backend set / --http --port "${LC_PORT}" 2>/dev/null || true
 
-    # Ensure lc shortcut exists
+    # Ensure ta shortcut exists
     mkdir -p "$HOME/bin"
-    cp "$STACK_DIR/librechat-uberspace/scripts/lc.sh" "$HOME/bin/lc" 2>/dev/null || true
-    chmod +x "$HOME/bin/lc" 2>/dev/null || true
+    cp "$STACK_DIR/librechat-uberspace/scripts/TradeAssistant.sh" "$HOME/bin/ta" 2>/dev/null || true
+    chmod +x "$HOME/bin/ta" 2>/dev/null || true
+    ln -sf "$HOME/bin/ta" "$HOME/bin/TradeAssistant" 2>/dev/null || true
 fi
 
 # ── 8. Data directory ───────────────────────
@@ -250,7 +251,7 @@ echo "    https://${UBER}"
 echo "    (first user to register becomes admin)"
 echo ""
 echo -e "  ${CYAN}Ops:${NC}"
-echo "    lc help                    # all commands"
-echo "    lc pull                    # quick git-pull update (dev)"
-echo "    lc u                       # release update (prod)"
+echo "    ta help                    # all commands"
+echo "    ta pull                    # quick git-pull update (dev)"
+echo "    ta u                       # release update (prod)"
 echo ""

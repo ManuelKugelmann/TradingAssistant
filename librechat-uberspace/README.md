@@ -40,10 +40,10 @@ cat deploy.conf
 | `UBER_HOST` | `assist.uber.space` | Uberspace hostname |
 | `GH_USER` | `ManuelKugelmann` | GitHub username |
 | `GH_REPO_STACK` | `TradingAssistant` | Signals stack repo |
-| `GH_REPO_DATA` | `librechat-data` | Data repo (private) |
+| `GH_REPO_DATA` | `TradeAssistant_Data` | Data repo (private) |
 | `STACK_DIR` | `$HOME/mcps` | Signals stack path |
 | `APP_DIR` | `$HOME/LibreChat` | LibreChat path |
-| `DATA_DIR` | `$HOME/librechat-data` | MCP data path |
+| `DATA_DIR` | `$HOME/TradeAssistant_Data` | MCP data path |
 | `LC_PORT` | `3080` | LibreChat port |
 | `NODE_VERSION` | `22` | Node.js version |
 
@@ -77,7 +77,7 @@ ssh assist@assist.uber.space
 curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/install.sh | bash
 ```
 
-This clones the repo, creates Python venv, installs LibreChat (from release or repo), registers all supervisord services, and sets up the `lc` command. Re-run safe.
+This clones the repo, creates Python venv, installs LibreChat (from release or repo), registers all supervisord services, and sets up the `ta` command. Re-run safe.
 
 For private repos: `curl -sL ... | GH_TOKEN=ghp_xxx bash`
 
@@ -118,7 +118,7 @@ Register your first user → that becomes the admin account.
 ### Step 6: Git-versioned data (optional, 5 min)
 
 ```bash
-# Create a PRIVATE repo on GitHub: ManuelKugelmann/librechat-data
+# Create a PRIVATE repo on GitHub: ManuelKugelmann/TradeAssistant_Data
 bash ~/LibreChat/scripts/setup-data-repo.sh
 # Reads GH_USER and GH_REPO_DATA from deploy.conf automatically
 # Sets up auto-sync every 15 min via cron
@@ -130,9 +130,9 @@ bash ~/LibreChat/scripts/setup-data-repo.sh
 
 | MCP Server | Purpose | Storage |
 |---|---|---|
-| `filesystem` | File read/write | `~/librechat-data/files/` |
-| `memory` | Knowledge graph | `~/librechat-data/memory.jsonl` |
-| `sqlite` | Structured data | `~/librechat-data/data.db` |
+| `filesystem` | File read/write | `~/TradeAssistant_Data/files/` |
+| `memory` | Knowledge graph | `~/TradeAssistant_Data/memory.jsonl` |
+| `sqlite` | Structured data | `~/TradeAssistant_Data/data.db` |
 
 ### Trading Signals Stack (requires `~/mcps/`)
 
@@ -154,45 +154,46 @@ bash ~/LibreChat/scripts/setup-data-repo.sh
 
 ## Day-to-Day Operations
 
-After install, the `lc` command is available:
+After install, the `ta` command is available (also accessible as `TradeAssistant`):
 
 ```bash
-lc s          # status + version + host
-lc l          # tail logs
-lc r          # restart
-lc v          # show version
-lc u          # update from latest GitHub release
-lc pull       # quick update via git pull (dev)
-lc install    # re-run full installer (idempotent)
-lc rb         # rollback to previous version
-lc sync       # force git sync of data
-lc env        # edit .env
-lc yaml       # edit librechat.yaml
-lc conf       # edit deploy.conf
+ta help       # show all commands
+ta s|status   # status + version + host
+ta l|logs     # tail logs
+ta r|restart  # restart LibreChat
+ta v|version  # show version
+ta u|update   # update from latest GitHub release
+ta pull       # quick update via git pull (dev)
+ta install    # re-run full installer (idempotent)
+ta rb|rollback # rollback to previous version
+ta sync       # force git sync of data
+ta env        # edit .env
+ta yaml       # edit librechat.yaml
+ta conf       # edit deploy.conf
 ```
 
 ## Updates
 
 | Method | Command | Use when |
 |--------|---------|----------|
-| Release | `lc u` | Production — downloads tagged release bundle |
-| Git pull | `lc pull` | Dev/testing — fast, no release needed |
-| Re-install | `lc install` | Full re-setup (idempotent, preserves config) |
+| Release | `ta u` | Production — downloads tagged release bundle |
+| Git pull | `ta pull` | Dev/testing — fast, no release needed |
+| Re-install | `ta install` | Full re-setup (idempotent, preserves config) |
 
 ```bash
 # Production: tag → CI builds bundle → deploy
 git tag v0.2.0 && git push --tags   # from dev machine
-lc u                                  # on Uberspace
+ta u                                  # on Uberspace
 
 # Dev: push to main → quick pull on server
 git push                              # from dev machine
-lc pull                               # on Uberspace (git pull + restart)
+ta pull                               # on Uberspace (git pull + restart)
 ```
 
 ## Rollback
 
 ```bash
-lc rb
+ta rb
 # Restores ~/LibreChat.prev (kept from last update)
 ```
 
