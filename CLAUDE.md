@@ -157,8 +157,13 @@ python-dotenv>=1.0
 3. On Uberspace: `ta u` (downloads release, atomic swap, restarts)
 4. Rollback if needed: `ta rb`
 
-### First Deploy (no release yet)
-`install.sh` handles this — falls back to repo checkout when no GitHub release exists.
+### First Deploy (one-liner)
+```bash
+curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/install.sh | bash
+# For private repos:
+curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/install.sh | GH_TOKEN=ghp_xxx bash
+```
+Clones repo, creates venv, registers services, installs LibreChat (release bundle or repo fallback), sets up `ta` shortcut. Re-run safe via `ta install`.
 
 ### Tagging from GitHub Web UI
 Releases → Draft a new release → Choose a tag → type `v0.1.0` → Create new tag on publish → Publish release
