@@ -8,9 +8,10 @@
 
 - **Repo**: `ManuelKugelmann/TradingAssistant`
 - **Data repo**: `ManuelKugelmann/TradeAssistant_Data` (private, git-synced every 15 min)
-- **Ops tool**: `TradeAssistant.sh` — installed on Uberspace as:
-  - `~/bin/ta` — primary shorthand (`ta help`, `ta status`, `ta update`, `ta pull`, etc.)
+- **Ops tool**: `TradeAssistant.sh` — single entry point for install + daily ops
+  - `~/bin/ta` — primary shorthand (`ta help`, `ta status`, `ta install`, etc.)
   - `~/bin/TradeAssistant` — symlink to `ta`
+  - Also works as one-liner: `curl ... TradeAssistant.sh | bash` (auto-detects fresh install)
 - **Uberspace host**: `assist.uber.space`
 
 ## Directory Layout (Uberspace)
@@ -30,7 +31,7 @@ TradingAssistant/
 ├── README.md                          ← project overview
 ├── TODO.md                            ← roadmap (P0–P5)
 ├── deploy.conf                        ← central config, sourced by all scripts
-├── install.sh                         ← one-liner installer (curl | bash)
+├── install.sh                         ← thin shim, delegates to TradeAssistant.sh
 ├── requirements.txt                   ← Python deps: fastmcp, httpx, pymongo, python-dotenv
 ├── .env.example                       ← signals stack env vars template
 │
@@ -159,11 +160,14 @@ python-dotenv>=1.0
 
 ### First Deploy (one-liner)
 ```bash
+# Direct (preferred):
+curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
+# Via shim (also works):
 curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/install.sh | bash
-# For private repos:
-curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/install.sh | GH_TOKEN=ghp_xxx bash
+# Private repos:
+curl -sL ... | GH_TOKEN=ghp_xxx bash
 ```
-Clones repo, creates venv, registers services, installs LibreChat (release bundle or repo fallback), sets up `ta` shortcut. Re-run safe via `ta install`.
+Auto-detects fresh install (no repo cloned → runs `install`). Clones repo, creates venv, registers services, installs LibreChat (release bundle or repo fallback), sets up `ta` shortcut. Re-run safe via `ta install`.
 
 ### Tagging from GitHub Web UI
 Releases → Draft a new release → Choose a tag → type `v0.1.0` → Create new tag on publish → Publish release
