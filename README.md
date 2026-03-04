@@ -47,12 +47,6 @@ ssh assist@assist.uber.space
 curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
 ```
 
-For private repos:
-
-```bash
-curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | GH_TOKEN=ghp_xxx bash
-```
-
 Then configure: `nano ~/mcps/.env` and `nano ~/LibreChat/.env`, then `supervisorctl start librechat`.
 
 Re-run safe — skips what's already done, preserves `.env` and config.

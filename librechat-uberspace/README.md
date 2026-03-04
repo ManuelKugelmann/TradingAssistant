@@ -86,12 +86,6 @@ curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main
 
 This clones the repo, creates Python venv, installs LibreChat (from release or repo), registers all supervisord services, and sets up the `ta` command. Re-run safe.
 
-For private repos:
-
-```bash
-curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | GH_TOKEN=ghp_xxx bash
-```
-
 ### Step 3: Configure (2 min)
 
 ```bash

@@ -3,7 +3,6 @@
 #
 # Fresh install (one-liner):
 #   curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
-#   # or with token: curl -sL ... | GH_TOKEN=ghp_xxx bash
 #
 # After install:
 #   ta help              # show all commands
