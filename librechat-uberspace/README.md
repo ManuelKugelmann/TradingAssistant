@@ -1,6 +1,4 @@
-# LibreChat Lite + Trading Signals → Uberspace
-
-LibreChat deployment with 15 MCP servers: 3 utility (filesystem, memory, sqlite) + 1 signals store + 12 trading domain servers covering 75+ data sources. No Docker, no Meilisearch, no RAG, no Redis.
+LibreChat deployment with 16 MCP servers: 3 utility (filesystem, memory, sqlite) + 1 signals store + 12 trading domain servers covering 75+ data sources. No Docker, no Meilisearch, no RAG, no Redis.
 
 All scripts read from `deploy.conf` — edit once, applies everywhere.
 
@@ -72,14 +70,19 @@ Override any value via environment: `UBER_USER=other ./scripts/bootstrap-uberspa
 
 ### Step 2: Deploy to Uberspace (one-liner)
 
+SSH into your Uberspace host:
+
 ```bash
 ssh assist@assist.uber.space
-curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/install.sh | bash
+```
+
+Then run the installer:
+
+```bash
+curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
 ```
 
 This clones the repo, creates Python venv, installs LibreChat (from release or repo), registers all supervisord services, and sets up the `ta` command. Re-run safe.
-
-For private repos: `curl -sL ... | GH_TOKEN=ghp_xxx bash`
 
 ### Step 3: Configure (2 min)
 
@@ -215,5 +218,5 @@ ta rb
 | Uberspace | ~5 EUR/mo (pay what you want, min 1 EUR) |
 | MongoDB Atlas | Free (shared tier, 512 MB) |
 | Cloud LLMs | Per-use (your API keys) |
-| GitHub | Free (unlimited private repos) |
+| GitHub | Free |
 | **Total** | **~5 EUR/mo + LLM usage** |

@@ -16,11 +16,7 @@ warn() { echo -e "${YELLOW}⚠${NC} $1"; }
 die()  { echo -e "${RED}✗${NC} $1" >&2; exit 1; }
 
 gh_curl() {
-    if [[ -n "${GH_TOKEN:-}" ]]; then
-        curl -sf -H "Authorization: token $GH_TOKEN" "$@"
-    else
-        curl -sf "$@"
-    fi
+    curl -sf "$@"
 }
 
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
@@ -29,7 +25,7 @@ echo -e "${CYAN}═════════════════════�
 echo ""
 
 log "Fetching latest release from ${REPO}..."
-JSON=$(gh_curl "$API") || die "Failed to fetch release info. For private repos: export GH_TOKEN=ghp_xxx"
+JSON=$(gh_curl "$API") || die "Failed to fetch release info"
 
 URL=$(echo "$JSON" | grep -o '"browser_download_url":[^"]*"[^"]*librechat-bundle.tar.gz"' | cut -d'"' -f4)
 VER=$(echo "$JSON" | grep -o '"tag_name":[^"]*"[^"]*"' | cut -d'"' -f4)

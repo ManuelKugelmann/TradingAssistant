@@ -3,7 +3,6 @@
 #
 # Fresh install (one-liner):
 #   curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
-#   # or with token: curl -sL ... | GH_TOKEN=ghp_xxx bash
 #
 # After install:
 #   ta help              # show all commands
@@ -23,11 +22,14 @@ NODE_VERSION="${NODE_VERSION:-22}"
 BRANCH="${BRANCH:-main}"
 
 # ── Load central config if available ──
-for _conf in "$STACK_DIR/deploy.conf" \
-             "$(cd "$(dirname "${BASH_SOURCE[0]:-/dev/null}")/../.." 2>/dev/null && pwd)/deploy.conf" 2>/dev/null; do
-    [[ -f "$_conf" ]] && { source "$_conf"; break; }
+_script_conf=""
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+    _script_conf="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)/deploy.conf"
+fi
+for _conf in "$STACK_DIR/deploy.conf" "$_script_conf"; do
+    [[ -n "$_conf" ]] && [[ -f "$_conf" ]] && { source "$_conf"; break; }
 done
-unset _conf
+unset _conf _script_conf
 
 APP="${APP_DIR:-$HOME/LibreChat}"
 DATA="${DATA_DIR:-$HOME/TradeAssistant_Data}"
@@ -58,9 +60,7 @@ _do_install() {
     echo ""
 
     gh_curl() {
-        local args=(-sf)
-        [[ -n "${GH_TOKEN:-}" ]] && args+=(-H "Authorization: token $GH_TOKEN")
-        curl "${args[@]}" "$@"
+        curl -sf "$@"
     }
 
     # ── 1. Node.js ──────────────────────────────
@@ -78,11 +78,7 @@ _do_install() {
         log "Repo updated"
     else
         log "Cloning repo..."
-        if [[ -n "${GH_TOKEN:-}" ]]; then
-            git clone -b "$BRANCH" "https://${GH_TOKEN}@github.com/${GH_USER}/${GH_REPO}.git" "$STACK"
-        else
-            git clone -b "$BRANCH" "https://github.com/${GH_USER}/${GH_REPO}.git" "$STACK"
-        fi
+        git clone -b "$BRANCH" "https://github.com/${GH_USER}/${GH_REPO}.git" "$STACK"
         log "Cloned → $STACK"
     fi
 
