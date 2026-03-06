@@ -131,7 +131,19 @@ autorestart=true
 stderr_logfile=%(ENV_HOME)s/logs/mcp-store.err.log
 stdout_logfile=%(ENV_HOME)s/logs/mcp-store.out.log
 SVCEOF
-    log "MCP services registered"
+
+    cat > ~/etc/services.d/charts.ini << SVCEOF
+[program:charts]
+directory=${STACK}
+command=${STACK}/venv/bin/python src/store/charts.py
+autostart=true
+autorestart=true
+stderr_logfile=%(ENV_HOME)s/logs/charts.err.log
+stdout_logfile=%(ENV_HOME)s/logs/charts.out.log
+SVCEOF
+    # Register /charts route to chart server port
+    uberspace web backend set /charts --http --port 8066 2>/dev/null || true
+    log "MCP services + chart server registered"
 
     # ── 6. LibreChat — try release bundle, fall back to local copy ──
     local NEED_LC_SETUP=false
