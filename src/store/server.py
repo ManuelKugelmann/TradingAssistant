@@ -1,14 +1,14 @@
 """MCP Signals Store — Hybrid profile/snapshot store.
 
 Profiles: JSON files on disk (git-tracked, human-editable).
-Snapshots: MongoDB Atlas timeseries collection (auto-created, TTL-pruned).
+Two MongoDB Atlas timeseries collections (auto-created on first access):
+  snapshots — recent signals, 1-year TTL, hours granularity
+  archive   — long-term history, no TTL, days granularity
 
-Timeseries layout:
-  timeField  = "ts"
-  metaField  = "meta"  (entity, type, source, + event-specific fields)
+Timeseries layout (both collections):
+  timeField  = "ts"      (always full datetime, even in archive)
+  metaField  = "meta"    (entity, type, source, + event-specific fields)
   data       = measurement payload
-  granularity = "hours"
-  expireAfterSeconds = 365 days (collection-level TTL)
 """
 from fastmcp import FastMCP
 from pymongo import MongoClient
@@ -24,7 +24,7 @@ mcp = FastMCP("signals-store", description="Hybrid profile/snapshot store")
 
 PROFILES = Path(os.environ.get("PROFILES_DIR", "./profiles"))
 _client = None
-_col_ready = False
+_cols_ready = set()
 
 KIND_PATHS = {
     "countries": "countries",
@@ -35,7 +35,7 @@ KIND_PATHS = {
     "sources": "sources",
 }
 
-TTL_SECONDS = 365 * 86400  # 1 year
+SNAPSHOTS_TTL = 365 * 86400         # 1 year
 
 
 def _db():
@@ -48,23 +48,36 @@ def _db():
     return _client.signals
 
 
-def _col():
-    """Return the snapshots timeseries collection, auto-creating if needed."""
-    global _col_ready
+def _ensure_ts(name: str, ttl: int | None = None, granularity: str = "hours"):
+    """Auto-create a timeseries collection if it doesn't exist."""
+    global _cols_ready
+    if name in _cols_ready:
+        return
     db = _db()
-    if not _col_ready:
-        if "snapshots" not in db.list_collection_names():
-            db.create_collection(
-                "snapshots",
-                timeseries={
-                    "timeField": "ts",
-                    "metaField": "meta",
-                    "granularity": "hours",
-                },
-                expireAfterSeconds=TTL_SECONDS,
-            )
-        _col_ready = True
-    return db.snapshots
+    if name not in db.list_collection_names():
+        opts: dict = {
+            "timeseries": {
+                "timeField": "ts",
+                "metaField": "meta",
+                "granularity": granularity,
+            },
+        }
+        if ttl is not None:
+            opts["expireAfterSeconds"] = ttl
+        db.create_collection(name, **opts)
+    _cols_ready.add(name)
+
+
+def _col():
+    """Return the snapshots timeseries collection (1-year TTL)."""
+    _ensure_ts("snapshots", ttl=SNAPSHOTS_TTL)
+    return _db().snapshots
+
+
+def _archive_col():
+    """Return the archive timeseries collection (no TTL, days granularity)."""
+    _ensure_ts("archive", granularity="days")
+    return _db().archive
 
 
 def _profile_dir(kind: str) -> Path | None:
@@ -234,12 +247,135 @@ def trend(entity: str, type: str, field: str,
 
 
 @mcp.tool()
-def aggregate(pipeline: list[dict]) -> list[dict]:
-    """Run a raw MongoDB aggregation pipeline on the snapshots timeseries collection.
+def aggregate(pipeline: list[dict], collection: str = "snapshots") -> list[dict]:
+    """Run a raw MongoDB aggregation pipeline.
+    collection: 'snapshots' (default) or 'archive'.
     Note: filter fields are under 'meta' (meta.entity, meta.type, meta.source, etc.).
     Example: [{"$match": {"meta.type": "event", "meta.subtype": "earthquake"}},
               {"$group": {"_id": "$data.country", "count": {"$sum": 1}}}]"""
-    return [_ser(r) for r in _col().aggregate(pipeline)]
+    col = _archive_col() if collection == "archive" else _col()
+    return [_ser(r) for r in col.aggregate(pipeline)]
+
+
+# ── Archive (long-term history) ───────────────────
+
+
+@mcp.tool()
+def archive_snapshot(entity: str, type: str, data: dict,
+                     source: str = "", ts: str = "") -> dict:
+    """Store a long-term snapshot in the archive (no TTL, kept forever).
+    Use for historical macro data, yearly GDP, quarterly earnings, etc."""
+    now = datetime.now(timezone.utc)
+    doc = {
+        "ts": datetime.fromisoformat(ts) if ts else now,
+        "meta": {"entity": entity, "type": type, "source": source},
+        "data": data,
+    }
+    r = _archive_col().insert_one(doc)
+    return {"id": str(r.inserted_id), "status": "ok"}
+
+
+@mcp.tool()
+def archive_history(entity: str, type: str = "",
+                    after: str = "", before: str = "",
+                    limit: int = 200) -> list[dict]:
+    """Query the long-term archive. Same interface as history()."""
+    q: dict = {"meta.entity": entity}
+    if type:
+        q["meta.type"] = type
+    if after or before:
+        q["ts"] = {}
+        if after:
+            q["ts"]["$gte"] = datetime.fromisoformat(after)
+        if before:
+            q["ts"]["$lt"] = datetime.fromisoformat(before)
+    rows = _archive_col().find(q).sort("ts", -1).limit(limit)
+    return [_ser(r) for r in rows]
+
+
+@mcp.tool()
+def compact(entity: str, type: str, older_than_days: int = 90,
+            bucket: str = "month") -> dict:
+    """Downsample old snapshots into the archive by averaging numeric fields.
+    bucket: 'week', 'month', or 'quarter'.
+    Aggregates snapshots older than older_than_days, writes monthly/weekly
+    averages to archive, then deletes the originals from snapshots."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+
+    date_trunc = {
+        "week": {"$dateTrunc": {"date": "$ts", "unit": "week"}},
+        "month": {"$dateTrunc": {"date": "$ts", "unit": "month"}},
+        "quarter": {"$dateTrunc": {"date": "$ts", "unit": "quarter"}},
+    }
+    if bucket not in date_trunc:
+        return {"error": f"invalid bucket: {bucket}, use week/month/quarter"}
+
+    # Step 1: find all data keys from a sample doc
+    sample = _col().find_one(
+        {"meta.entity": entity, "meta.type": type, "ts": {"$lt": cutoff}}
+    )
+    if not sample:
+        return {"status": "nothing_to_compact", "entity": entity, "type": type}
+
+    data_keys = list(sample.get("data", {}).keys())
+
+    # Step 2: aggregate into buckets, averaging all numeric fields
+    group_accumulators = {
+        k.replace(".", "_"): {"$avg": f"$data.{k}"} for k in data_keys
+    }
+    group_accumulators["_source"] = {"$first": "$meta.source"}
+    group_accumulators["_count"] = {"$sum": 1}
+
+    pipeline = [
+        {"$match": {
+            "meta.entity": entity, "meta.type": type, "ts": {"$lt": cutoff},
+        }},
+        {"$group": {
+            "_id": date_trunc[bucket],
+            **group_accumulators,
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+
+    buckets = list(_col().aggregate(pipeline))
+    if not buckets:
+        return {"status": "nothing_to_compact", "entity": entity, "type": type}
+
+    # Step 3: insert compacted docs into archive
+    archive_docs = []
+    for b in buckets:
+        data = {}
+        for k in data_keys:
+            safe_k = k.replace(".", "_")
+            val = b.get(safe_k)
+            if val is not None:
+                data[k] = round(val, 6) if isinstance(val, float) else val
+        data["_samples"] = b["_count"]
+        archive_docs.append({
+            "ts": b["_id"],
+            "meta": {
+                "entity": entity,
+                "type": type,
+                "source": b.get("_source", ""),
+            },
+            "data": data,
+        })
+
+    _archive_col().insert_many(archive_docs)
+
+    # Step 4: delete compacted originals from snapshots
+    result = _col().delete_many(
+        {"meta.entity": entity, "meta.type": type, "ts": {"$lt": cutoff}}
+    )
+
+    return {
+        "status": "ok",
+        "buckets_created": len(archive_docs),
+        "snapshots_deleted": result.deleted_count,
+        "bucket_size": bucket,
+        "oldest": archive_docs[0]["ts"].isoformat(),
+        "newest": archive_docs[-1]["ts"].isoformat(),
+    }
 
 
 def _ser(doc: dict) -> dict:
