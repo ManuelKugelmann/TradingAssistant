@@ -2,8 +2,11 @@
 
 **This is a dev/ops workflow tool, NOT part of the production TradingAssistant stack.**
 
-It deploys a lightweight MCP gateway on Uberspace so that Claude.ai and Claude Code (web)
-can manage the server remotely. Think of it as SSH-over-MCP for our dev workflow.
+It deploys a lightweight MCP gateway on Uberspace so that Claude.ai (web + mobile)
+and Claude Code can manage the server remotely. Think of it as SSH-over-MCP for our
+dev workflow.
+
+**Supported clients**: Claude.ai web, Claude iOS/Android, Claude Code CLI, Claude Desktop.
 
 ---
 
@@ -17,10 +20,12 @@ Write, Edit, Grep, and all Claude Code tools — running natively on the Uberspa
 read logs, edit configs — everything through Claude Code's native tools.
 
 ```
-Claude.ai / Claude Code (web)
+Claude.ai (web/mobile) / Claude Code CLI / Claude Desktop
     |
-    |  HTTPS + OAuth 2.1  (GitHub login)
-    |  Streamable HTTP transport
+    |  1. Discovers OAuth via /.well-known/oauth-protected-resource
+    |  2. Registers via DCR (/register) — gets back our GitHub app creds
+    |  3. OAuth flow: user → our /authorize → GitHub login → our /auth/callback → client callback
+    |  4. Streamable HTTP transport with JWT bearer token
     v
 https://mcp.assist.uber.space/mcp
     |
@@ -79,14 +84,24 @@ Claude Code's native tools cover every use case.
 2. Fill in:
    - **Application name**: `TradingAssistant MCP Gateway`
    - **Homepage URL**: `https://mcp.assist.uber.space`
-   - **Authorization callback URL**: `https://claude.ai/api/mcp/auth_callback`
+   - **Authorization callback URL**: `https://mcp.assist.uber.space/auth/callback`
 3. Click **Register application**
 4. Copy the **Client ID**
 5. Click **Generate a new client secret**, copy it
 6. Save both for Step 4
 
-> **Note**: GitHub OAuth Apps only support one callback URL. For Claude Code CLI
-> access, create a second OAuth App with a localhost callback, or use bearer tokens.
+> **Important**: The callback URL points to **our server**, NOT to Claude.ai.
+> FastMCP's OAuthProxy handles the full redirect chain:
+>
+> 1. Claude.ai registers via DCR → gets our GitHub app credentials
+> 2. User clicks Connect → redirected to our `/authorize` endpoint
+> 3. We redirect to GitHub login (callback = our `/auth/callback`)
+> 4. GitHub redirects back to us with auth code
+> 5. We exchange code for token, mint a FastMCP JWT
+> 6. We redirect to Claude.ai's callback with our JWT
+>
+> This means all MCP clients (Claude.ai web, mobile, CLI, Desktop) work
+> through the same OAuth App — no per-client callback URLs needed.
 
 ---
 
@@ -279,19 +294,51 @@ curl -s -o /dev/null -w "%{http_code}" https://mcp.assist.uber.space/mcp
 
 ---
 
-## Step 9: Connect Claude.ai
+## Step 9: Connect Clients
+
+### Claude.ai (web)
 
 1. Go to https://claude.ai → Settings → Connectors → **Add custom connector**
 2. Enter URL: `https://mcp.assist.uber.space/mcp`
-3. Click Connect → GitHub OAuth flow opens
+3. Click **Connect** → GitHub OAuth flow opens automatically
 4. Authorize with your GitHub account
+5. The connector appears as active — tools are now available in conversations
 
-### Test it
+### Claude Mobile (iOS / Android)
 
-In a Claude.ai conversation:
+Servers **cannot** be added directly from the mobile app. Add via claude.ai web first
+(steps above), then:
+
+1. Open Claude app on your phone
+2. The connector syncs automatically from your account
+3. Tools, prompts, and resources from the gateway are available in mobile conversations
+
+### Claude Code CLI
+
+```bash
+claude mcp add trading-gateway --transport http https://mcp.assist.uber.space/mcp
+claude mcp auth trading-gateway  # triggers OAuth flow in browser
+```
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "trading-gateway": {
+      "url": "https://mcp.assist.uber.space/mcp"
+    }
+  }
+}
+```
+
+### Test it (any client)
+
 > "Check the service status on the Uberspace server"
 
-Claude.ai uses the Bash tool to run `supervisorctl status` directly on the server.
+Claude uses the Bash tool to run `supervisorctl status` directly on the server.
 
 ---
 
@@ -338,12 +385,14 @@ No custom tools. Claude.ai reasons about what to do, executes via native tools.
 
 | Layer | Mechanism |
 |-------|-----------|
-| Authentication | GitHub OAuth 2.1 via FastMCP GitHubProvider |
+| Authentication | GitHub OAuth 2.1 via FastMCP GitHubProvider + DCR |
+| Token isolation | FastMCP issues its own JWTs — upstream GitHub tokens never exposed to clients |
 | Authorization | OAuth App scope + optional user allowlist (see Step 5) |
 | Transport | HTTPS only (Uberspace auto-TLS via Let's Encrypt) |
 | Execution | Claude Code's built-in safety model |
 | Origin | FastMCP validates Origin header per MCP spec |
-| Isolation | Each proxy session has its own Claude Code backend |
+| Consent | FastMCP shows consent screen before granting access |
+| Client support | Web, iOS, Android, CLI, Desktop — all via same OAuth App |
 
 ---
 
@@ -379,9 +428,10 @@ Common issues:
 ### OAuth flow fails
 
 1. Verify callback URL in GitHub OAuth App matches exactly:
-   `https://claude.ai/api/mcp/auth_callback`
+   `https://mcp.assist.uber.space/auth/callback` (points to OUR server, not Claude.ai)
 2. Check env vars: `grep GH_OAUTH ~/mcps/.env`
-3. Test discovery: `curl -s https://mcp.assist.uber.space/.well-known/oauth-protected-resource`
+3. Test OAuth discovery: `curl -s https://mcp.assist.uber.space/.well-known/oauth-protected-resource`
+4. Test DCR endpoint: `curl -s -X POST https://mcp.assist.uber.space/register -H 'Content-Type: application/json' -d '{"client_name":"test","redirect_uris":["http://localhost"]}'`
 
 ### Subdomain not resolving
 
@@ -417,10 +467,12 @@ rm -rf ~/mcps/src/gateway
 
 ## References
 
+- [Building custom connectors (Anthropic)](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) — official guide for remote MCP + Claude.ai
+- [About custom integrations (Anthropic)](https://support.anthropic.com/en/articles/11175166-about-custom-integrations-using-remote-mcp) — setup for Pro/Max/Team/Enterprise
 - [FastMCP Proxy Servers](https://gofastmcp.com/servers/proxy) — `create_proxy()` docs
-- [FastMCP OAuth Proxy](https://gofastmcp.com/servers/auth/oauth-proxy) — OAuthProxy / GitHubProvider
+- [FastMCP OAuth Proxy](https://gofastmcp.com/servers/auth/oauth-proxy) — OAuthProxy / GitHubProvider / DCR flow
 - [Uberspace Web Backends](https://manual.uberspace.de/web-backends/) — reverse proxy routing
-- [Uberspace Domains](https://manual.uberspace.de/en/web-domains.html) — subdomain setup
+- [Uberspace Domains](https://manual.uberspace.de/en/web-domains.html) — subdomain setup (`.uber.space` = no DNS needed)
 - [claude mcp serve (#631)](https://github.com/anthropics/claude-code/issues/631) — serve mode discussion
 - [claude-code-mcp (steipete)](https://github.com/steipete/claude-code-mcp) — Claude Code as MCP pattern
 - [Claude Code MCP docs](https://code.claude.com/docs/en/mcp) — official MCP guide
