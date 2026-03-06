@@ -6,7 +6,7 @@
 - Deployed via LibreChat on Uberspace, no Docker needed
 - CI release workflow with one-liner install and `ta` ops CLI
 
-## Architecture
+## Data Sources and Storage
 
 ```mermaid
 graph LR
@@ -26,15 +26,13 @@ graph LR
     Uber -->|cron 15min| DataRepo[Data repo]
 ```
 
-## Storage
-
 | Layer | What | Format | Update Freq |
 |-------|------|--------|-------------|
 | JSON profiles | Identity, exposure, risk factors | 1 file per entity, git-tracked | Manual / monthly |
 | Atlas M0 snapshots | Time-series indicators, events | Documents with TTL auto-prune | Hourly → quarterly |
 | MCP live queries | Current data from 75+ APIs | On-demand | Real-time |
 
-**Design principle:** Profile = what it **is**. Snapshot = what was measured **when**. MCP = current **live** state.
+Profile = what it **is**. Snapshot = what was measured **when**. MCP = current **live** state.
 
 ## Deploy to Uberspace
 
