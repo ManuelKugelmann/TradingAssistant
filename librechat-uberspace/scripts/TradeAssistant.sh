@@ -385,7 +385,7 @@ case "$CMD" in
         if [[ "$HOUR" == "02" ]]; then
             _cron_log "running daily compact"
             if [[ -f "$STACK/venv/bin/python" ]]; then
-                "$STACK/venv/bin/python" - <<'PYEOF'
+                STACK="$STACK" "$STACK/venv/bin/python" - <<'PYEOF'
 import os, sys
 sys.path.insert(0, os.environ.get("STACK", os.path.expanduser("~/mcps")))
 from dotenv import load_dotenv
