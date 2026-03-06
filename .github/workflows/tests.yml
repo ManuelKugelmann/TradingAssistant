@@ -1,0 +1,63 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shell-tests:
+    name: Shell script tests (bats)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats
+        run: |
+          git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
+          sudo /tmp/bats/install.sh /usr/local
+
+      - name: Syntax check all shell scripts
+        run: |
+          find . -name '*.sh' -not -path './node_modules/*' -not -path './venv/*' | while read f; do
+            echo "Checking: $f"
+            bash -n "$f"
+          done
+
+      - name: Run bats tests
+        run: bats tests/*.bats
+
+  python-tests:
+    name: Python tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pytest
+
+      - name: Run pytest
+        run: python -m pytest tests/test_store.py -v
+
+  shellcheck:
+    name: ShellCheck lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        run: |
+          shellcheck --severity=error \
+            librechat-uberspace/scripts/TradeAssistant.sh \
+            librechat-uberspace/scripts/setup.sh \
+            librechat-uberspace/scripts/setup-data-repo.sh \
+            librechat-uberspace/scripts/bootstrap.sh \
+            scripts/nightly-git-commit.sh \
+            deploy.conf \
+          || true
