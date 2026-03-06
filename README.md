@@ -1,6 +1,7 @@
 ### TradingAssistant
 
-- 12 MCP domain servers querying 75+ free data sources
+- 13 custom MCP servers: 12 data-source adapters wrapping 75+ free APIs + 1 signals store
+- 3 community MCP servers: filesystem, memory, sqlite
 - Hybrid store: JSON profiles (git-tracked) + MongoDB snapshots (TTL)
 - Deployed via LibreChat on Uberspace, no Docker needed
 - CI release workflow with one-liner install and `ta` ops CLI
@@ -14,15 +15,14 @@ graph LR
     CI -->|bundle| Uber[Uberspace]
 
     Uber --> LC[LibreChat :3080]
-    LC --> FS[filesystem MCP]
-    LC --> Mem[memory MCP]
-    LC --> SQL[sqlite MCP]
-    LC --> Store[signals-store MCP]
-    LC --> Domain[12 domain servers]
+
+    LC --> Community[filesystem · memory · sqlite]
+    LC --> Store[signals-store]
+    LC --> Adapters[12 data-source adapters]
 
     Store --> Profiles[JSON profiles]
     Store --> Atlas[MongoDB Atlas M0]
-    Domain --> APIs[75+ free APIs]
+    Adapters --> APIs[75+ free APIs]
     Uber -->|cron 15min| DataRepo[Data repo]
 ```
 
