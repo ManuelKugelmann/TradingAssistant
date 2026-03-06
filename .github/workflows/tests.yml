@@ -40,10 +40,10 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install pytest
+        run: pip install pytest httpx
 
       - name: Run pytest
-        run: python -m pytest tests/test_store.py -v
+        run: python -m pytest tests/ -v
 
   shellcheck:
     name: ShellCheck lint
