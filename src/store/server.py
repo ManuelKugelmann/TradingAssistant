@@ -1,7 +1,14 @@
 """MCP Signals Store — Hybrid profile/snapshot store.
 
 Profiles: JSON files on disk (git-tracked, human-editable).
-Snapshots: MongoDB Atlas M0 (volatile, TTL auto-prune).
+Snapshots: MongoDB Atlas timeseries collection (auto-created, TTL-pruned).
+
+Timeseries layout:
+  timeField  = "ts"
+  metaField  = "meta"  (entity, type, source, + event-specific fields)
+  data       = measurement payload
+  granularity = "hours"
+  expireAfterSeconds = 365 days (collection-level TTL)
 """
 from fastmcp import FastMCP
 from pymongo import MongoClient
@@ -17,6 +24,7 @@ mcp = FastMCP("signals-store", description="Hybrid profile/snapshot store")
 
 PROFILES = Path(os.environ.get("PROFILES_DIR", "./profiles"))
 _client = None
+_col_ready = False
 
 KIND_PATHS = {
     "countries": "countries",
@@ -27,22 +35,36 @@ KIND_PATHS = {
     "sources": "sources",
 }
 
+TTL_SECONDS = 365 * 86400  # 1 year
 
-def _col():
+
+def _db():
     global _client
     if not _client:
         uri = os.environ.get("MONGO_URI")
         if not uri:
             raise RuntimeError("MONGO_URI not set")
         _client = MongoClient(uri)
-    return _client.signals.snapshots
+    return _client.signals
 
 
-def _ensure_indexes():
-    col = _col()
-    col.create_index([("entity", 1), ("type", 1), ("ts", -1)])
-    col.create_index([("type", 1), ("ts", -1)])
-    col.create_index("expires_at", expireAfterSeconds=0)
+def _col():
+    """Return the snapshots timeseries collection, auto-creating if needed."""
+    global _col_ready
+    db = _db()
+    if not _col_ready:
+        if "snapshots" not in db.list_collection_names():
+            db.create_collection(
+                "snapshots",
+                timeseries={
+                    "timeField": "ts",
+                    "metaField": "meta",
+                    "granularity": "hours",
+                },
+                expireAfterSeconds=TTL_SECONDS,
+            )
+        _col_ready = True
+    return db.snapshots
 
 
 def _profile_dir(kind: str) -> Path | None:
@@ -119,18 +141,15 @@ def search_profiles(kind: str, field: str, value: str) -> list[dict]:
 
 @mcp.tool()
 def snapshot(entity: str, type: str, data: dict,
-             source: str = "", ts: str = "", ttl_days: int = 365) -> dict:
+             source: str = "", ts: str = "") -> dict:
     """Store a timestamped snapshot. entity: profile ID (e.g. 'DEU', 'AAPL').
-    type: indicators, price, fundamentals."""
+    type: indicators, price, fundamentals.
+    TTL is managed at the collection level (365 days from ts)."""
     now = datetime.now(timezone.utc)
     doc = {
-        "entity": entity,
-        "type": type,
-        "source": source,
         "ts": datetime.fromisoformat(ts) if ts else now,
+        "meta": {"entity": entity, "type": type, "source": source},
         "data": data,
-        "created_at": now,
-        "expires_at": now + timedelta(days=ttl_days),
     }
     r = _col().insert_one(doc)
     return {"id": str(r.inserted_id), "status": "ok"}
@@ -140,22 +159,22 @@ def snapshot(entity: str, type: str, data: dict,
 def event(subtype: str, summary: str, data: dict,
           severity: str = "medium", countries: list[str] = [],
           entities: list[str] = [], source: str = "",
-          ts: str = "", ttl_days: int = 180) -> dict:
-    """Log a signal event. severity: low, medium, high, critical."""
+          ts: str = "") -> dict:
+    """Log a signal event. severity: low, medium, high, critical.
+    TTL is managed at the collection level (365 days from ts)."""
     now = datetime.now(timezone.utc)
     doc = {
-        "entity": None,
-        "type": "event",
-        "subtype": subtype,
-        "severity": severity,
-        "countries": countries,
-        "entities": entities,
-        "summary": summary,
-        "source": source,
-        "data": data,
         "ts": datetime.fromisoformat(ts) if ts else now,
-        "created_at": now,
-        "expires_at": now + timedelta(days=ttl_days),
+        "meta": {
+            "type": "event",
+            "subtype": subtype,
+            "severity": severity,
+            "countries": countries,
+            "entities": entities,
+            "source": source,
+        },
+        "summary": summary,
+        "data": data,
     }
     r = _col().insert_one(doc)
     return {"id": str(r.inserted_id), "status": "ok"}
@@ -165,10 +184,11 @@ def event(subtype: str, summary: str, data: dict,
 def history(entity: str, type: str = "",
             after: str = "", before: str = "",
             limit: int = 100) -> list[dict]:
-    """Get snapshot history for an entity. Newest first."""
-    q: dict = {"entity": entity}
+    """Get snapshot history for an entity. Newest first.
+    Fields are under meta.entity, meta.type, meta.source."""
+    q: dict = {"meta.entity": entity}
     if type:
-        q["type"] = type
+        q["meta.type"] = type
     if after or before:
         q["ts"] = {}
         if after:
@@ -183,17 +203,17 @@ def history(entity: str, type: str = "",
 def recent_events(subtype: str = "", severity: str = "",
                   countries: list[str] = [], days: int = 30,
                   limit: int = 50) -> list[dict]:
-    """Query recent events."""
+    """Query recent events. Filters on meta.type='event' and meta sub-fields."""
     q: dict = {
-        "type": "event",
+        "meta.type": "event",
         "ts": {"$gte": datetime.now(timezone.utc) - timedelta(days=days)},
     }
     if subtype:
-        q["subtype"] = subtype
+        q["meta.subtype"] = subtype
     if severity:
-        q["severity"] = severity
+        q["meta.severity"] = severity
     if countries:
-        q["countries"] = {"$in": countries}
+        q["meta.countries"] = {"$in": countries}
     rows = _col().find(q).sort("ts", -1).limit(limit)
     return [_ser(r) for r in rows]
 
@@ -204,7 +224,7 @@ def trend(entity: str, type: str, field: str,
     """Extract a single field's trend over time.
     field: key in data, e.g. 'gdp_growth_pct' or 'close'."""
     pipeline = [
-        {"$match": {"entity": entity, "type": type}},
+        {"$match": {"meta.entity": entity, "meta.type": type}},
         {"$sort": {"ts": -1}},
         {"$limit": periods},
         {"$project": {"ts": 1, "value": f"$data.{field}", "_id": 0}},
@@ -215,24 +235,22 @@ def trend(entity: str, type: str, field: str,
 
 @mcp.tool()
 def aggregate(pipeline: list[dict]) -> list[dict]:
-    """Run a raw MongoDB aggregation pipeline.
-    Example: [{"$match": {"type": "event", "subtype": "earthquake"}},
+    """Run a raw MongoDB aggregation pipeline on the snapshots timeseries collection.
+    Note: filter fields are under 'meta' (meta.entity, meta.type, meta.source, etc.).
+    Example: [{"$match": {"meta.type": "event", "meta.subtype": "earthquake"}},
               {"$group": {"_id": "$data.country", "count": {"$sum": 1}}}]"""
     return [_ser(r) for r in _col().aggregate(pipeline)]
 
 
 def _ser(doc: dict) -> dict:
     doc["_id"] = str(doc.get("_id", ""))
-    for k in ("ts", "created_at", "expires_at"):
+    for k in ("ts",):
         if isinstance(doc.get(k), datetime):
             doc[k] = doc[k].isoformat()
+    # Flatten meta into top-level for caller convenience
+    if "meta" in doc:
+        doc.update(doc.pop("meta"))
     return doc
-
-
-try:
-    _ensure_indexes()
-except Exception:
-    pass  # Atlas may not be configured yet
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
