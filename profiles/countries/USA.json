@@ -14,7 +14,7 @@
   },
   "exposure": {
     "commodities_import": ["crude_oil", "electronics", "vehicles", "pharmaceuticals"],
-    "energy_mix": {"gas": 0.40, "renewables": 0.21, "nuclear": 0.19, "coal": 0.16},
+    "energy_mix": {"gas": 0.40, "renewables": 0.21, "nuclear": 0.19, "coal": 0.16, "oil": 0.01, "other": 0.03},
     "risk_factors": ["fiscal_deficit", "political_polarization", "infrastructure_aging"]
   },
   "ratings": {

@@ -26,6 +26,7 @@
       "press_freedom_rank": "RSF rank",
       "corruption_perception": "TI CPI score"
     },
+    "tags": "Array of group memberships (e.g. EU, G7, NATO)",
     "_updated": "ISO date of last update",
     "_sources": "Array of source labels"
   }

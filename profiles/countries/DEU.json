@@ -14,7 +14,7 @@
   },
   "exposure": {
     "commodities_import": ["natural_gas", "crude_oil", "rare_earths"],
-    "energy_mix": {"renewables": 0.46, "gas": 0.15, "coal": 0.26, "nuclear": 0.0},
+    "energy_mix": {"renewables": 0.46, "gas": 0.15, "coal": 0.26, "nuclear": 0.0, "oil": 0.01, "other": 0.12},
     "risk_factors": ["energy_dependence", "china_export_exposure", "demographic_decline"]
   },
   "ratings": {

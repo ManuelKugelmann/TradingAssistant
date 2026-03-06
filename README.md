@@ -42,6 +42,28 @@ curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main
 
 Then configure `nano ~/mcps/.env` and `nano ~/LibreChat/.env`, then `supervisorctl start librechat`. Re-run safe — skips what's already done, preserves config.
 
+## MongoDB Atlas Setup (free M0 cluster)
+
+1. **Create account** — go to [cloud.mongodb.com](https://cloud.mongodb.com/) and sign up (free)
+2. **Create a cluster** — choose **M0 Free Tier**, pick any cloud provider/region
+3. **Create a database user** — Security → Database Access → Add New Database User → password auth
+4. **Allow network access** — Security → Network Access → Add IP Address
+   - For Uberspace: add `185.26.156.0/22` (Uberspace IP range) or your server's IP
+   - For local dev: add your current IP or `0.0.0.0/0` (allow all, less secure)
+5. **Get the connection string** — Deployment → Database → Connect → Drivers → copy the URI
+   - Format: `mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority`
+6. **Configure the project** — paste the URI into your `.env` files:
+
+```bash
+# Signals store (~/.env or ~/mcps/.env)
+MONGO_URI=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/signals?retryWrites=true&w=majority
+
+# LibreChat (~/LibreChat/.env) — uses a separate database name
+MONGO_URI=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/LibreChat?retryWrites=true&w=majority
+```
+
+The signals store uses the `signals` database for snapshots (TTL auto-pruned). LibreChat uses `LibreChat` for chat history and user accounts. Both can share the same M0 cluster.
+
 ## Quick Start (local dev)
 
 ```bash

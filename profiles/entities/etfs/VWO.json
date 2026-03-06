@@ -5,6 +5,11 @@
   "exchange": "NYSE",
   "sector": "Broad Market",
   "country": "USA",
+  "industry": "Emerging Markets Equity",
+  "fundamentals": {
+    "inception": 2005,
+    "expense_ratio": 0.08
+  },
   "exposure": {
     "countries": ["CHN", "IND", "TWN", "BRA", "ZAF", "SAU", "THA", "MEX"],
     "commodities": ["oil", "copper", "iron_ore", "soybeans"],

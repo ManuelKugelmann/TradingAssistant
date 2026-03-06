@@ -1,0 +1,23 @@
+{
+  "$schema": "Profile schema for data sources",
+  "required": ["id", "name", "mcp", "auth"],
+  "properties": {
+    "id": "Unique source identifier (lowercase, hyphenated)",
+    "name": "Human-readable source name",
+    "mcp": "MCP server that hosts this source (e.g. weather, macro, disasters)",
+    "tool": "MCP tool name to invoke",
+    "api_base": "Base URL of the upstream API",
+    "auth": "Authentication type: none | api_key | token",
+    "refresh": {
+      "frequency": "How often to snapshot: continuous | daily | weekly | monthly | quarterly",
+      "snapshot_type": "Snapshot kind: indicators | event",
+      "default_params": "Default query parameters (object)"
+    },
+    "signal": {
+      "thresholds": "Alert threshold definitions by severity level"
+    },
+    "ttl_days": "Snapshot retention in days",
+    "_updated": "ISO date of last update",
+    "_sources": "Array of source labels"
+  }
+}
