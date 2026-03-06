@@ -1,4 +1,9 @@
-MCP-based trading signals platform: 12 domain servers querying 75+ free data sources, a hybrid store (JSON profiles + MongoDB snapshots), deployed via LibreChat on Uberspace.
+### TradingAssistant
+
+- 12 MCP domain servers querying 75+ free data sources
+- Hybrid store: JSON profiles (git-tracked) + MongoDB snapshots (TTL)
+- Deployed via LibreChat on Uberspace, no Docker needed
+- CI release workflow with one-liner install and `ta` ops CLI
 
 ## Architecture
 
