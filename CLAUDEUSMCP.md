@@ -107,13 +107,16 @@ Claude Code's native tools cover every use case.
 
 ## Step 2: Set Up Subdomain on Uberspace
 
-`.uber.space` subdomains need no DNS setup — Uberspace handles it automatically:
+`.uber.space` subdomains: DNS resolves automatically (Uberspace manages the zone),
+but each subdomain must be [registered individually](https://manual.uberspace.de/en/web-domains.html)
+— no wildcard domains (Let's Encrypt HTTP validation limitation):
 
 ```bash
 uberspace web domain add mcp.assist.uber.space
 ```
 
-That's it. TLS certificate is provisioned automatically via Let's Encrypt.
+That's it — no A/AAAA records to configure at a registrar.
+TLS certificate is provisioned automatically via Let's Encrypt.
 
 ---
 
