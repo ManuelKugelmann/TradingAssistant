@@ -44,9 +44,9 @@ _SAFE_ID = re.compile(r'^[A-Za-z0-9_-]+$')
 def _db():
     global _client
     if not _client:
-        uri = os.environ.get("MONGO_URI")
+        uri = os.environ.get("MONGO_URI_SIGNALS") or os.environ.get("MONGO_URI")
         if not uri:
-            raise RuntimeError("MONGO_URI not set")
+            raise RuntimeError("MONGO_URI_SIGNALS (or MONGO_URI) not set")
         _client = MongoClient(uri)
     return _client.signals
 
@@ -774,7 +774,11 @@ def compact(kind: str, entity: str, type: str, older_than_days: int = 90,
             "data": d,
         })
 
-    _arch_col(kind).insert_many(archive_docs)
+    arch_result = _arch_col(kind).insert_many(archive_docs)
+    if len(arch_result.inserted_ids) != len(archive_docs):
+        return {"error": "partial archive insert — snapshots preserved",
+                "archived": len(arch_result.inserted_ids),
+                "expected": len(archive_docs)}
 
     result = snap.delete_many(
         {"meta.entity": entity, "meta.type": type, "ts": {"$lt": cutoff}}

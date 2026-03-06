@@ -1,4 +1,6 @@
-# Build LibreChat bundle and create GitHub release on tag push.
+# Build pre-built LibreChat bundle and create GitHub release on tag push.
+# The bundle includes: LibreChat (built), MCP node packages, our config/scripts.
+# Uberspace gets a ready-to-run app — no build step on the host.
 # Usage: git tag v0.1.0 && git push --tags
 name: Release LibreChat Bundle
 
@@ -20,11 +22,36 @@ jobs:
         with:
           node-version: 22
 
-      - name: Prepare bundle
+      - name: Clone and build LibreChat
         run: |
-          mkdir -p bundle/config bundle/scripts
+          git clone --depth 1 https://github.com/danny-avila/LibreChat.git librechat-src
+          cd librechat-src
+          npm ci
+          npm run frontend
+          cd ..
 
-          # Copy LibreChat deployment files
+      - name: Assemble bundle
+        run: |
+          mkdir -p bundle
+
+          # Copy built LibreChat app (server + client + node_modules)
+          cp -r librechat-src/api       bundle/api
+          cp -r librechat-src/client     bundle/client
+          cp -r librechat-src/packages   bundle/packages 2>/dev/null || true
+          cp -r librechat-src/node_modules bundle/node_modules
+          cp    librechat-src/package.json bundle/package.json
+
+          # Install MCP Node packages into existing node_modules
+          cd bundle
+          npm install --save \
+            @modelcontextprotocol/server-filesystem \
+            @modelcontextprotocol/server-memory \
+            mcp-sqlite
+          rm -f package-lock.json
+          cd ..
+
+          # Add our config and scripts
+          mkdir -p bundle/config bundle/scripts
           cp deploy.conf                                bundle/
           cp librechat-uberspace/config/librechat.yaml  bundle/config/
           cp librechat-uberspace/config/.env.example    bundle/config/
@@ -32,16 +59,6 @@ jobs:
           cp librechat-uberspace/scripts/bootstrap.sh   bundle/scripts/
           cp librechat-uberspace/scripts/TradeAssistant.sh bundle/scripts/
           cp librechat-uberspace/scripts/setup-data-repo.sh bundle/scripts/
-
-          # Pre-install MCP Node packages into bundle
-          cd bundle
-          npm init -y --silent
-          npm install --save \
-            @modelcontextprotocol/server-filesystem \
-            @modelcontextprotocol/server-memory \
-            mcp-sqlite
-          rm -f package-lock.json
-          cd ..
 
           # Create tarball
           tar czf librechat-bundle.tar.gz -C bundle .

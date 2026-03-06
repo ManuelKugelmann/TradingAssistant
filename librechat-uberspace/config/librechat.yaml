@@ -62,6 +62,7 @@ mcpServers:
       - __HOME__/mcps/src/store/server.py
     env:
       PROFILES_DIR: __HOME__/mcps/profiles
+      MONGO_URI_SIGNALS: "${MONGO_URI_SIGNALS}"
     serverInstructions: |
       Hybrid profile/snapshot store for trading signals.
       Profiles: get_profile, put_profile, list_profiles, search_profiles
