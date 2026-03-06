@@ -8,22 +8,14 @@
 
 ## Data Sources and Storage
 
-```mermaid
-graph LR
-    Dev[Dev / Codespace] -->|push / tag| GH[GitHub]
-    GH -->|tag| CI[CI Release]
-    CI -->|bundle| Uber[Uberspace]
-
-    Uber --> LC[LibreChat :3080]
-
-    LC --> Community[filesystem · memory · sqlite]
-    LC --> Store[signals-store]
-    LC --> Adapters[12 data-source adapters]
-
-    Store --> Profiles[JSON profiles]
-    Store --> Atlas[MongoDB Atlas M0]
-    Adapters --> APIs[75+ free APIs]
-    Uber -->|cron 15min| DataRepo[Data repo]
+```
+LibreChat :3080
+ ├─ filesystem · memory · sqlite     (community MCPs)
+ ├─ signals-store                     (custom MCP)
+ │   ├─ profiles/    JSON on disk, git-tracked
+ │   └─ snapshots    MongoDB Atlas M0, TTL auto-prune
+ └─ 12 data-source adapters          (custom MCPs)
+     └─ 75+ free REST APIs
 ```
 
 | Layer | What | Format | Update Freq |
