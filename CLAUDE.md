@@ -205,7 +205,7 @@ Key fields: `id`, `name`, `url`, `type`, `domains`, `update_freq`, `api_key_requ
 `profiles/INDEX.json` — flat array of `{id, kind, name, tags?, sector?, region?}` for all profiles. Used by `find_profile()` for fast cross-kind name/tag search.
 
 - **Updated incrementally** on every `put_profile()` call (patches single entry, O(1) reads)
-- **Full rebuild** via `_rebuild_index()` when INDEX.json is missing or corrupted
+- **Full rebuild** via `rebuild_index()` tool, or automatically when INDEX.json is missing/corrupted
 - Designed for 1000+ profiles — no full scan on writes
 - Git-tracked, human-readable
 
@@ -218,6 +218,7 @@ Key fields: `id`, `name`, `url`, `type`, `domains`, `update_freq`, `api_key_requ
 | `search_profiles(kind, field, value)` | Field-level search within a kind | No (reads files) |
 | `get_profile(kind, id)` | Read one profile | No |
 | `put_profile(kind, id, data)` | Create/merge profile, updates INDEX | Writes INDEX |
+| `rebuild_index()` | Force full INDEX.json rebuild from disk | Writes INDEX |
 
 ## Environment Variables
 

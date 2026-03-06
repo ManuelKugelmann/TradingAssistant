@@ -170,6 +170,16 @@ def _rebuild_index():
 
 
 @mcp.tool()
+def rebuild_index() -> dict:
+    """Force full rebuild of INDEX.json from all profile files on disk.
+    Use after bulk imports, manual file edits, or if the index seems stale."""
+    _rebuild_index()
+    idx_path = PROFILES / "INDEX.json"
+    index = json.loads(idx_path.read_text()) if idx_path.exists() else []
+    return {"status": "ok", "entries": len(index)}
+
+
+@mcp.tool()
 def list_profiles(kind: str) -> list[dict]:
     """List all profiles for a kind. Returns [{id, name}, ...] for quick lookup."""
     d = _profile_dir(kind)
