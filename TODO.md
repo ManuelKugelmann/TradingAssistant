@@ -44,6 +44,12 @@ Global roadmap and task list. Updated 2026-03-03.
 
 ## P2 — Server Improvements
 
+- [ ] **Add cross-reference validation to profile linter**
+      `lint_profiles()` currently does basic checks (required fields, types).
+      Add a `deep=True` mode that validates cross-references: country ISO3 codes
+      in `exposure.countries` exist as profiles, `trade.top_partners` resolve,
+      source `mcp` fields match actual server names, supply chain entity IDs exist.
+
 - [ ] **Add error handling and retries to domain servers**
       Most servers do bare `httpx.get()` calls with no retry, timeout, or error wrapping.
       Add consistent error responses and configurable timeouts.

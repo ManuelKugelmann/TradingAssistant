@@ -1,0 +1,26 @@
+{
+  "$schema": "Profile schema for companies (legal entities)",
+  "required": ["id", "name", "country"],
+  "properties": {
+    "id": "Company identifier (lowercase, e.g. tsmc, samsung, aramco)",
+    "name": "Legal entity name",
+    "country": "HQ country ISO3",
+    "lei": "Legal Entity Identifier (optional)",
+    "sector": "Industry sector",
+    "industry": "Sub-industry",
+    "revenue": "Annual revenue (approx, USD)",
+    "employees": "Headcount",
+    "publicly_traded": "true/false — if true, see stocks/ profile for ticker",
+    "ticker": "Stock ticker if publicly traded",
+    "subsidiaries": "Array of notable subsidiary names",
+    "exposure": {
+      "countries": "Operating countries (ISO3 codes)",
+      "products": "Product profile IDs",
+      "materials": "Material dependencies",
+      "risk_factors": "Company-specific risks"
+    },
+    "tags": "Array of categorization tags",
+    "_updated": "ISO date of last update",
+    "_sources": "Array of source labels"
+  }
+}

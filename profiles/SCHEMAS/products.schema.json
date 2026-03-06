@@ -1,0 +1,22 @@
+{
+  "$schema": "Profile schema for products",
+  "required": ["id", "name", "category"],
+  "properties": {
+    "id": "Product identifier (semiconductors, ev_batteries, lng, etc.)",
+    "name": "Full name",
+    "category": "electronics | energy | pharma | automotive | industrial | consumer",
+    "hs_codes": "Array of relevant HS tariff codes",
+    "manufacturers": "Key producing countries (ISO3 codes)",
+    "inputs": "Raw material / component dependencies",
+    "trade_volume": "Approximate annual global trade value",
+    "exposure": {
+      "countries": "Countries in manufacturing/consumption chain",
+      "materials": "Input material profile IDs",
+      "commodities": "Input commodity profile IDs",
+      "risk_factors": "Supply chain risks"
+    },
+    "tags": "Array of categorization tags",
+    "_updated": "ISO date of last update",
+    "_sources": "Array of source labels"
+  }
+}

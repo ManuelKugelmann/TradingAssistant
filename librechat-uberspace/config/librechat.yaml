@@ -104,9 +104,11 @@ mcpServers:
     command: __HOME__/mcps/venv/bin/python
     args:
       - __HOME__/mcps/src/servers/agri_server.py
+    env:
+      USDA_NASS_API_KEY: "${USDA_NASS_API_KEY}"
     serverInstructions: |
       Agriculture and food data. Sources: FAOSTAT, USDA NASS/FAS,
-      GIEWS price monitor, WASDE reports. No key needed for most.
+      GIEWS price monitor, WASDE reports. USDA NASS needs free API key.
 
   conflict:
     command: __HOME__/mcps/venv/bin/python
