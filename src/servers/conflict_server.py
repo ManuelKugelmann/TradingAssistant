@@ -13,7 +13,7 @@ ACLED_EMAIL = os.environ.get("ACLED_EMAIL", "")
 @mcp.tool()
 async def ucdp_conflicts(year: int = 2024, page: int = 1) -> dict:
     """UCDP armed conflicts by year. Georeferenced events 1946-present."""
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://ucdpapi.pcr.uu.se/api/gedevents/24.1",
                         params={"pagesize": 100, "page": page, "Year": year})
         r.raise_for_status()
@@ -34,7 +34,7 @@ async def acled_events(country: str = "", event_type: str = "",
         params["event_type"] = event_type
     if event_date_start:
         params["event_date"] = f"{event_date_start}|"
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://api.acleddata.com/acled/read", params=params)
         r.raise_for_status()
         return r.json()
@@ -46,7 +46,7 @@ async def search_sanctions(query: str, schema: str = "") -> dict:
     params = {"q": query, "limit": 20}
     if schema:
         params["schema"] = schema
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://api.opensanctions.org/search/default", params=params)
         r.raise_for_status()
         return r.json()
@@ -55,7 +55,7 @@ async def search_sanctions(query: str, schema: str = "") -> dict:
 @mcp.tool()
 async def military_spending(country: str = "all", date: str = "2015:2024") -> dict:
     """SIPRI military expenditure (% GDP) via World Bank."""
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get(
             f"https://api.worldbank.org/v2/country/{country}/indicator/MS.MIL.XPND.GD.ZS",
             params={"format": "json", "date": date, "per_page": 300})

@@ -1,0 +1,19 @@
+{
+  "$schema": "Profile schema for crypto assets",
+  "required": ["id", "name", "type"],
+  "properties": {
+    "id": "Ticker symbol (BTC, ETH, etc.)",
+    "name": "Full name",
+    "type": "crypto",
+    "network": "Blockchain network name",
+    "consensus": "Consensus mechanism (PoW, PoS, etc.)",
+    "max_supply": "Maximum token supply (null if uncapped)",
+    "exposure": {
+      "countries": "Regulatory exposure by country ISO3",
+      "risk_factors": "Crypto-specific risks"
+    },
+    "tags": "Array of categorization tags",
+    "_updated": "ISO date of last update",
+    "_sources": "Array of source labels"
+  }
+}

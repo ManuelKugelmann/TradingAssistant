@@ -1,0 +1,17 @@
+{
+  "id": "faostat",
+  "name": "FAO Statistics",
+  "mcp": "agri",
+  "tool": "fao_data",
+  "api_base": "https://fenixservices.fao.org/faostat/api/v1/",
+  "auth": "none",
+  "refresh": {
+    "frequency": "monthly",
+    "snapshot_type": "indicators",
+    "default_params": {"domain": "QCL"}
+  },
+  "ttl_days": 365,
+  "_updated": "2026-03-03",
+  "_placeholder": true,
+  "_note": "Seed data for development. Config values will be refined once MCP servers are validated."
+}

@@ -1,7 +1,7 @@
 """Disasters — USGS Earthquakes + GDACS + NASA EONET."""
 from fastmcp import FastMCP
 import httpx
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 mcp = FastMCP("disasters", description="Real-time earthquakes, disasters, natural events")
 
@@ -10,7 +10,7 @@ mcp = FastMCP("disasters", description="Real-time earthquakes, disasters, natura
 async def get_earthquakes(min_magnitude: float = 4.0, days: int = 7,
                           alert_level: str = "", limit: int = 100) -> dict:
     """Recent earthquakes. alert_level: green/yellow/orange/red or empty."""
-    start = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
     params = {"format": "geojson", "starttime": start,
               "minmagnitude": min_magnitude, "limit": limit, "orderby": "time"}
     if alert_level:

@@ -33,16 +33,7 @@ Profile = what it **is**. Snapshot = what was measured **when**. MCP = current *
 
 28 sources need zero API key. 15 need a free key. 0 paid.
 
-## Deploy to Uberspace
-
-```bash
-ssh assist@assist.uber.space
-curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
-```
-
-Then configure `nano ~/mcps/.env` and `nano ~/LibreChat/.env`, then `supervisorctl start librechat`. Re-run safe — skips what's already done, preserves config.
-
-## Quick Start (local dev)
+## Quick Start
 
 ```bash
 git clone https://github.com/ManuelKugelmann/TradingAssistant.git
@@ -52,6 +43,9 @@ pip install -r requirements.txt
 cp .env.example .env   # edit with MONGO_URI + API keys
 python src/store/server.py
 ```
+
+Full setup (MongoDB Atlas, API keys, Uberspace deploy): **[docs/setup.md](docs/setup.md)**
+API keys reference with signup links: **[docs/api-keys.md](docs/api-keys.md)**
 
 ## License
 

@@ -1,0 +1,23 @@
+{
+  "id": "VWO",
+  "name": "Vanguard FTSE Emerging Markets ETF",
+  "type": "etf",
+  "exchange": "NYSE",
+  "sector": "Broad Market",
+  "country": "USA",
+  "industry": "Emerging Markets Equity",
+  "fundamentals": {
+    "inception": 2005,
+    "expense_ratio": 0.08
+  },
+  "exposure": {
+    "countries": ["CHN", "IND", "TWN", "BRA", "ZAF", "SAU", "THA", "MEX"],
+    "commodities": ["oil", "copper", "iron_ore", "soybeans"],
+    "risk_factors": ["em_currency_risk", "china_slowdown", "geopolitical_instability"]
+  },
+  "tags": ["emerging_markets", "diversified", "passive"],
+  "_updated": "2026-03-03",
+  "_sources": ["Vanguard", "Yahoo Finance"],
+  "_placeholder": true,
+  "_note": "Seed data for development. Values are approximate and will be replaced by live MCP data."
+}

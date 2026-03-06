@@ -51,5 +51,4 @@ jobs:
         with:
           files: |
             librechat-bundle.tar.gz
-            install.sh
           generate_release_notes: true

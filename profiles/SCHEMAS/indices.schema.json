@@ -1,0 +1,21 @@
+{
+  "$schema": "Profile schema for market indices",
+  "required": ["id", "name", "type"],
+  "properties": {
+    "id": "Index symbol (SPX, NDX, DJI, etc.)",
+    "name": "Full name",
+    "type": "index",
+    "country": "Primary country ISO3",
+    "exchange": "Exchange",
+    "components": "Number of constituents",
+    "methodology": "Weighting method (market-cap, price, equal)",
+    "exposure": {
+      "sectors": "Sector breakdown",
+      "countries": "Country allocation",
+      "risk_factors": "Index-specific risks"
+    },
+    "tags": "Array of categorization tags",
+    "_updated": "ISO date of last update",
+    "_sources": "Array of source labels"
+  }
+}

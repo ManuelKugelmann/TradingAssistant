@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.."
 git add -A profiles/
 if ! git diff --cached --quiet; then
   git commit -m "auto: $(date +%Y-%m-%d) profile updates"
+  git push 2>/dev/null || echo "⚠ Push failed (will retry next run)"
   echo "✅ Committed profile changes"
 else
   echo "— No profile changes"

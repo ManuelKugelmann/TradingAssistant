@@ -1,0 +1,21 @@
+{
+  "$schema": "Profile schema for regions (geographic buckets for geotagging)",
+  "required": ["id", "name", "type"],
+  "properties": {
+    "id": "Region identifier (eu, mena, sahel, gulf_of_mexico, etc.)",
+    "name": "Full name",
+    "type": "continent | subregion | economic_zone | climate_zone | maritime | corridor",
+    "countries": "Array of member country ISO3 codes",
+    "bbox": "Bounding box [west, south, east, north] for geo queries",
+    "climate": "Dominant climate classification (Köppen or descriptive)",
+    "hazards": "Array of natural hazard types common to region",
+    "chokepoints": "Shipping/trade chokepoints in region",
+    "exposure": {
+      "commodities": "Key commodities produced/transited",
+      "risk_factors": "Regional risk factors"
+    },
+    "tags": "Array of categorization tags",
+    "_updated": "ISO date of last update",
+    "_sources": "Array of source labels"
+  }
+}

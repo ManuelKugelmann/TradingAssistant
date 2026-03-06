@@ -1,0 +1,22 @@
+{
+  "$schema": "Profile schema for crops",
+  "required": ["id", "name", "category"],
+  "properties": {
+    "id": "Crop identifier (corn, soybeans, rice, etc.)",
+    "name": "Full name",
+    "category": "grains | oilseeds | fibers | sugar | fruits | vegetables",
+    "growing_season": "Typical planting-to-harvest months",
+    "producers": "Array of top producer country ISO3 codes",
+    "exporters": "Array of top exporter country ISO3 codes",
+    "water_intensity": "Relative water requirement (low, medium, high)",
+    "climate_sensitivity": "Climate risk factors (drought, frost, flood)",
+    "exposure": {
+      "countries": "Countries with significant production",
+      "commodities": "Related commodity profiles",
+      "risk_factors": "Supply risk factors"
+    },
+    "tags": "Array of categorization tags",
+    "_updated": "ISO date of last update",
+    "_sources": "Array of source labels"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "open-meteo",
+  "name": "Open-Meteo Weather",
+  "mcp": "weather",
+  "tool": "forecast",
+  "api_base": "https://api.open-meteo.com/v1/",
+  "auth": "none",
+  "refresh": {
+    "frequency": "daily",
+    "snapshot_type": "indicators"
+  },
+  "ttl_days": 30,
+  "_updated": "2026-03-03",
+  "_placeholder": true,
+  "_note": "Seed data for development. Config values will be refined once MCP servers are validated."
+}

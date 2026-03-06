@@ -1,0 +1,24 @@
+{
+  "id": "AAPL",
+  "name": "Apple Inc.",
+  "type": "stock",
+  "exchange": "NASDAQ",
+  "sector": "Information Technology",
+  "industry": "Technology Hardware",
+  "country": "USA",
+  "fundamentals": {
+    "founded": 1976,
+    "employees": 164000
+  },
+  "exposure": {
+    "countries": ["USA", "CHN", "JPN", "KOR", "IND"],
+    "commodities": ["lithium", "cobalt", "rare_earths", "aluminum"],
+    "supply_chain": ["TSMC", "Foxconn", "Samsung", "BOE"],
+    "risk_factors": ["china_manufacturing", "consumer_spending", "antitrust"]
+  },
+  "tags": ["consumer_electronics", "services", "mega_cap"],
+  "_updated": "2026-03-03",
+  "_sources": ["SEC EDGAR", "Yahoo Finance"],
+  "_placeholder": true,
+  "_note": "Seed data for development. Values are approximate and will be replaced by live MCP data."
+}

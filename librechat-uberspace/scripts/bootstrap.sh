@@ -32,7 +32,7 @@ VER=$(echo "$JSON" | grep -o '"tag_name":[^"]*"[^"]*"' | cut -d'"' -f4)
 [[ -z "$URL" ]] && die "No bundle found in release"
 
 TMP=$(mktemp -d)
-trap "rm -rf $TMP" EXIT
+trap 'rm -rf "$TMP"' EXIT
 
 log "Downloading ${VER}..."
 gh_curl -L -o "$TMP/bundle.tar.gz" "$URL"

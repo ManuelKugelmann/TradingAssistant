@@ -17,7 +17,7 @@ async def internet_traffic(location: str = "", date_range: str = "7d") -> dict:
     params = {"dateRange": date_range}
     if location:
         params["location"] = location
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://api.cloudflare.com/client/v4/radar/http/summary/http_protocol",
                         params=params,
                         headers={"Authorization": f"Bearer {CF_TOKEN}"})
@@ -32,7 +32,7 @@ async def ripe_probes(country: str = "", status: int = 1,
     params = {"limit": limit, "status": status}
     if country:
         params["country_code"] = country
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://atlas.ripe.net/api/v2/probes/", params=params)
         r.raise_for_status()
         return r.json()

@@ -1,0 +1,23 @@
+{
+  "id": "usgs-earthquakes",
+  "name": "USGS Earthquake Hazards",
+  "mcp": "disasters",
+  "tool": "get_earthquakes",
+  "api_base": "https://earthquake.usgs.gov/fdsnws/event/1/",
+  "auth": "none",
+  "refresh": {
+    "frequency": "continuous",
+    "snapshot_type": "event",
+    "default_params": {"min_magnitude": 4.0, "days": 7}
+  },
+  "signal": {
+    "thresholds": {
+      "high": {"min_magnitude": 6.0},
+      "critical": {"min_magnitude": 7.0, "tsunami": 1}
+    }
+  },
+  "ttl_days": 180,
+  "_updated": "2026-03-03",
+  "_placeholder": true,
+  "_note": "Seed data for development. Config values will be refined once MCP servers are validated."
+}

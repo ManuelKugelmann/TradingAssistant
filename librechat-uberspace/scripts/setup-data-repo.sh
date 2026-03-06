@@ -102,14 +102,19 @@ if ! git diff --cached --quiet 2>/dev/null; then
 fi
 cd - >/dev/null
 
-# ── Cron for auto-sync ─────────────────────
-CRON_CMD="cd $DATA && git add -A && git diff --cached --quiet || (git commit -m \"sync \$(date -Is)\" && git push) 2>&1 | logger -t ta-data-sync"
+# ── Cron: unified ta cron hook ─────────────
+CRON_CMD="$HOME/bin/ta cron 2>&1 | logger -t ta-cron"
 
-if crontab -l 2>/dev/null | grep -q "ta-data-sync"; then
-    log "Cron sync already configured"
+if crontab -l 2>/dev/null | grep -q "ta cron"; then
+    log "Cron already configured (ta cron)"
 else
+    # Remove legacy ta-data-sync cron if present
+    if crontab -l 2>/dev/null | grep -q "ta-data-sync"; then
+        crontab -l 2>/dev/null | grep -v "ta-data-sync" | crontab -
+        log "Removed legacy ta-data-sync cron"
+    fi
     (crontab -l 2>/dev/null; echo "*/15 * * * * $CRON_CMD") | crontab -
-    log "Cron: syncing data to GitHub every 15 minutes"
+    log "Cron: ta cron every 15 minutes (data sync + profiles + daily compact)"
 fi
 
 echo ""

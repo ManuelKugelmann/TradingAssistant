@@ -44,6 +44,12 @@ Global roadmap and task list. Updated 2026-03-03.
 
 ## P2 — Server Improvements
 
+- [ ] **Add cross-reference validation to profile linter**
+      `lint_profiles()` currently does basic checks (required fields, types).
+      Add a `deep=True` mode that validates cross-references: country ISO3 codes
+      in `exposure.countries` exist as profiles, `trade.top_partners` resolve,
+      source `mcp` fields match actual server names, supply chain entity IDs exist.
+
 - [ ] **Add error handling and retries to domain servers**
       Most servers do bare `httpx.get()` calls with no retry, timeout, or error wrapping.
       Add consistent error responses and configurable timeouts.
@@ -93,6 +99,10 @@ Global roadmap and task list. Updated 2026-03-03.
 
 - [ ] **Add CONTRIBUTING.md** with profile contribution guidelines
       How to add a new country/entity/source profile, naming conventions, schema rules.
+- [ ] **Iterate on profile schemas based on actual MCP data**
+      Run each domain server, inspect the data it returns, and update `_schema.json`
+      files so profile fields match the real structure of MCP responses.
+      Add fields that capture what the APIs actually provide; remove speculative ones.
 - [ ] **Add JSON Schema validation** (proper `$schema` with `jsonschema` library)
       Current `_schema.json` files are descriptive, not machine-validatable.
       Convert to proper JSON Schema draft-07 or later.

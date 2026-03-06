@@ -17,7 +17,7 @@ async def election_reports(query: str = "election", country: str = "",
               "query[value]": query, "sort[]": "date:desc"}
     if country:
         params["filter[field]"] = f"country.name:{country}"
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://api.reliefweb.int/v1/reports", params=params)
         r.raise_for_status()
         return r.json()
@@ -28,7 +28,7 @@ async def us_voter_info(address: str) -> dict:
     """US election info for an address (Google Civic Info API)."""
     if not GOOGLE_KEY:
         return {"error": "GOOGLE_API_KEY not set"}
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://www.googleapis.com/civicinfo/v2/voterInfoQuery",
                         params={"key": GOOGLE_KEY, "address": address})
         r.raise_for_status()

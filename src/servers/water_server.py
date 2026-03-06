@@ -23,7 +23,7 @@ async def streamflow(site: str = "", state: str = "CA",
 @mcp.tool()
 async def drought(area_type: str = "state", area: str = "CA") -> dict:
     """US Drought Monitor. area_type: state/county/national."""
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://usdm.unl.edu/DmData/TimeSeries.aspx",
                         params={"area_type": area_type, "area": area, "format": "json"})
         r.raise_for_status()

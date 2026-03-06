@@ -16,7 +16,7 @@ async def fred_series(series_id: str, limit: int = 100,
     T10Y2Y (yield curve), M2SL (money supply), VIXCLS, ICSA (jobless claims)."""
     if not FRED_KEY:
         return {"error": "FRED_API_KEY not set"}
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://api.stlouisfed.org/fred/series/observations", params={
             "series_id": series_id, "api_key": FRED_KEY,
             "file_type": "json", "limit": limit, "sort_order": sort_order})
@@ -29,7 +29,7 @@ async def fred_search(query: str, limit: int = 20) -> dict:
     """Search FRED for economic data series."""
     if not FRED_KEY:
         return {"error": "FRED_API_KEY not set"}
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://api.stlouisfed.org/fred/series/search", params={
             "search_text": query, "api_key": FRED_KEY,
             "file_type": "json", "limit": limit})
@@ -44,7 +44,7 @@ async def worldbank_indicator(indicator: str = "NY.GDP.MKTP.CD",
     """World Bank indicator. Examples: NY.GDP.MKTP.CD (GDP), SP.POP.TOTL (population),
     FP.CPI.TOTL.ZG (inflation), SL.UEM.TOTL.ZS (unemployment),
     MS.MIL.XPND.GD.ZS (military spending % GDP)."""
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get(
             f"https://api.worldbank.org/v2/country/{country}/indicator/{indicator}",
             params={"format": "json", "date": date, "per_page": per_page})
@@ -55,7 +55,7 @@ async def worldbank_indicator(indicator: str = "NY.GDP.MKTP.CD",
 @mcp.tool()
 async def worldbank_search(query: str) -> dict:
     """Search World Bank indicators by keyword."""
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://api.worldbank.org/v2/indicator",
                         params={"format": "json", "qterm": query, "per_page": 50})
         r.raise_for_status()
@@ -68,7 +68,7 @@ async def imf_data(database: str = "IFS", frequency: str = "A",
                     start: str = "2020", end: str = "2024") -> dict:
     """IMF SDMX. database: IFS, BOP, DOT, WEO.
     indicator: NGDP_R_XDC (real GDP), PCPI_IX (CPI), ENDA_XDC_USD_RATE (exchange)."""
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get(
             f"https://dataservices.imf.org/REST/SDMX_JSON.svc/CompactData/"
             f"{database}/{frequency}.{ref_area}.{indicator}",

@@ -16,6 +16,8 @@ async def trade_flows(reporter: str = "842", partner: str = "0",
                       period: str = "2023") -> dict:
     """UN Comtrade trade flows. reporter/partner: M49 codes (842=USA, 156=China,
     276=Germany, 0=World). flow: M(import), X(export)."""
+    if not COMTRADE_KEY:
+        return {"error": "COMTRADE_API_KEY not set"}
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://comtradeapi.un.org/data/v1/get/C/A/HS", params={
             "reporterCode": reporter, "partnerCode": partner,
@@ -34,7 +36,7 @@ async def energy_series(series: str = "PET.RWTC.D",
     ELEC.GEN.ALL-US-99.M (US electricity)."""
     if not EIA_KEY:
         return {"error": "EIA_API_KEY not set"}
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get(f"https://api.eia.gov/v2/seriesid/{series}",
                         params={"api_key": EIA_KEY, "start": start,
                                 "frequency": frequency})

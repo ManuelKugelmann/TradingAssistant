@@ -1,0 +1,22 @@
+{
+  "$schema": "Profile schema for commodities",
+  "required": ["id", "name", "category"],
+  "properties": {
+    "id": "Commodity identifier (crude_oil, gold, wheat, etc.)",
+    "name": "Full name",
+    "category": "energy | metals | agriculture | livestock",
+    "unit": "Standard trading unit (barrel, troy_oz, bushel, etc.)",
+    "benchmark": "Benchmark contract (WTI, Brent, COMEX, etc.)",
+    "producers": "Array of top producer country ISO3 codes",
+    "consumers": "Array of top consumer country ISO3 codes",
+    "chokepoints": "Shipping chokepoints affecting supply",
+    "seasonality": "Seasonal production/demand pattern",
+    "exposure": {
+      "countries": "Countries with significant production/consumption",
+      "risk_factors": "Supply/demand risk factors"
+    },
+    "tags": "Array of categorization tags",
+    "_updated": "ISO date of last update",
+    "_sources": "Array of source labels"
+  }
+}

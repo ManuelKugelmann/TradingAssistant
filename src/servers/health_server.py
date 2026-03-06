@@ -1,8 +1,11 @@
 """Health — WHO GHO, WHO Outbreaks, disease.sh, OpenFDA."""
 from fastmcp import FastMCP
 import httpx
+import re
 
 mcp = FastMCP("health", description="Global health, disease outbreaks, FDA data")
+
+_SAFE_ODATA = re.compile(r'^[A-Za-z0-9_-]+$')
 
 
 @mcp.tool()
@@ -15,8 +18,12 @@ async def who_indicator(indicator: str = "NCDMORT3070",
     params = {}
     filters = []
     if country:
+        if not _SAFE_ODATA.match(country):
+            return {"error": "invalid country code"}
         filters.append(f"SpatialDim eq '{country}'")
     if year:
+        if not _SAFE_ODATA.match(year):
+            return {"error": "invalid year"}
         filters.append(f"TimeDim eq {year}")
     if filters:
         params["$filter"] = " and ".join(filters)
@@ -29,7 +36,7 @@ async def who_indicator(indicator: str = "NCDMORT3070",
 @mcp.tool()
 async def disease_outbreaks(limit: int = 20) -> dict:
     """Latest WHO Disease Outbreak News."""
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://www.who.int/api/news/diseaseoutbreaknews",
                         params={"sf_culture": "en", "$top": limit,
                                 "$orderby": "PublicationDate desc"})
@@ -40,7 +47,7 @@ async def disease_outbreaks(limit: int = 20) -> dict:
 @mcp.tool()
 async def disease_tracker(disease: str = "covid", country: str = "") -> dict:
     """Real-time disease tracking (disease.sh). disease: covid/influenza."""
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         if disease == "covid":
             url = f"https://disease.sh/v3/covid-19/{'countries/' + country if country else 'all'}"
         else:
@@ -54,7 +61,7 @@ async def disease_tracker(disease: str = "covid", country: str = "") -> dict:
 async def fda_adverse_events(drug: str = "", limit: int = 20) -> dict:
     """FDA adverse drug event reports."""
     search = f'patient.drug.medicinalproduct:"{drug}"' if drug else ""
-    async with httpx.AsyncClient() as c:
+    async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://api.fda.gov/drug/event.json",
                         params={"search": search, "limit": limit})
         r.raise_for_status()

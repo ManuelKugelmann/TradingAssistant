@@ -1,0 +1,21 @@
+{
+  "$schema": "Profile schema for ETFs",
+  "required": ["id", "name", "type"],
+  "properties": {
+    "id": "Ticker symbol",
+    "name": "Full name",
+    "type": "etf",
+    "exchange": "Exchange code",
+    "issuer": "ETF issuer (Vanguard, iShares, etc.)",
+    "strategy": "Investment strategy (passive, active, thematic)",
+    "exposure": {
+      "countries": "Country ISO3 codes with allocation weights",
+      "sectors": "Sector breakdown",
+      "commodities": "Commodity exposures",
+      "risk_factors": "ETF-specific risks"
+    },
+    "tags": "Array of categorization tags",
+    "_updated": "ISO date of last update",
+    "_sources": "Array of source labels"
+  }
+}
