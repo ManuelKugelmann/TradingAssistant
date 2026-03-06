@@ -14,6 +14,14 @@ setup() {
     stub_command "node" 'echo "v22.0.0"'
     stub_command "npm" 'echo "stubbed npm $*"'
     stub_command "hostname" 'echo "test.uber.space"'
+    stub_command "python3" 'echo "stubbed python3 $*"'
+}
+
+# Helper: create a minimal source directory that passes setup.sh validation
+create_src_app() {
+    local src="${1:?}"
+    create_src_app "$src" "$src/api/server"
+    echo "// stub" > "$src/api/server/index.js"
 }
 
 teardown() {
@@ -33,7 +41,7 @@ teardown() {
 @test "setup.sh install mode creates version file" {
     # Prepare a source directory with required files
     local src="$TEST_SANDBOX/src_app"
-    mkdir -p "$src/config" "$src/scripts" "$src/node_modules/@modelcontextprotocol"
+    create_src_app "$src"
 
     # Create .env.example
     cat > "$src/config/.env.example" <<'EOF'
@@ -58,7 +66,7 @@ EOF
 
 @test "setup.sh install mode generates .env with crypto keys" {
     local src="$TEST_SANDBOX/src_app"
-    mkdir -p "$src/config" "$src/scripts" "$src/node_modules/@modelcontextprotocol"
+    create_src_app "$src"
     cat > "$src/config/.env.example" <<'EOF'
 CREDS_KEY=placeholder
 CREDS_IV=placeholder
@@ -90,7 +98,7 @@ EOF
 
     # Source directory
     local src="$TEST_SANDBOX/src_app"
-    mkdir -p "$src/config" "$src/scripts" "$src/node_modules/@modelcontextprotocol"
+    create_src_app "$src"
 
     run bash "$REPO_ROOT/librechat-uberspace/scripts/setup.sh" "$src" "v1.1.0"
     [[ "$status" -eq 0 ]]
@@ -109,7 +117,7 @@ EOF
 
 @test "setup.sh creates supervisord service file on install" {
     local src="$TEST_SANDBOX/src_app"
-    mkdir -p "$src/config" "$src/scripts" "$src/node_modules/@modelcontextprotocol"
+    create_src_app "$src"
     cat > "$src/config/.env.example" <<'EOF'
 CREDS_KEY=placeholder
 CREDS_IV=placeholder
@@ -129,7 +137,7 @@ EOF
 
 @test "setup.sh creates data directory with .gitignore" {
     local src="$TEST_SANDBOX/src_app"
-    mkdir -p "$src/config" "$src/scripts" "$src/node_modules/@modelcontextprotocol"
+    create_src_app "$src"
     cat > "$src/config/.env.example" <<'EOF'
 CREDS_KEY=placeholder
 CREDS_IV=placeholder
@@ -147,7 +155,7 @@ EOF
 
 @test "setup.sh copies librechat.yaml and replaces __HOME__" {
     local src="$TEST_SANDBOX/src_app"
-    mkdir -p "$src/config" "$src/scripts" "$src/node_modules/@modelcontextprotocol"
+    create_src_app "$src"
     echo "path: __HOME__/data" > "$src/config/librechat.yaml"
     cat > "$src/config/.env.example" <<'EOF'
 CREDS_KEY=placeholder
