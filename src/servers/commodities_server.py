@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-mcp = FastMCP("commodities", description="UN trade flows, EIA energy data")
+mcp = FastMCP("commodities", instructions="UN trade flows, EIA energy data")
 COMTRADE_KEY = os.environ.get("COMTRADE_API_KEY", "")
 EIA_KEY = os.environ.get("EIA_API_KEY", "")
 

@@ -2,7 +2,7 @@
 from fastmcp import FastMCP
 import httpx
 
-mcp = FastMCP("humanitarian", description="Refugee, displacement, and humanitarian data")
+mcp = FastMCP("humanitarian", instructions="Refugee, displacement, and humanitarian data")
 
 
 @mcp.tool()
