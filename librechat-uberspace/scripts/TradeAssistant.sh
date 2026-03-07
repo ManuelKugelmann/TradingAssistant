@@ -162,9 +162,9 @@ SVCEOF
         local VER="" SRC=""
 
         if [[ "$DEV_MODE" == true ]]; then
-            log "Dev mode: skipping release bundle, building from git..."
+            log "Dev mode: skipping tagged release, trying CI build..."
         else
-            # Try GitHub release first
+            # Try tagged GitHub release first (from release.yml)
             local RELEASE_URL="https://api.github.com/repos/${GH_USER}/${GH_REPO}/releases/latest"
             local JSON="" BUNDLE_URL=""
             if JSON=$(gh_curl "$RELEASE_URL" 2>/dev/null); then
@@ -178,12 +178,31 @@ SVCEOF
                 mkdir -p "$TMP/app"
                 tar xzf "$TMP/bundle.tar.gz" -C "$TMP/app"
                 SRC="$TMP/app"
-            else
-                warn "No release bundle found — falling back to git-based build"
             fi
         fi
 
-        # ── Git-based fallback: clone LibreChat + build ──
+        # ── Fallback 1: CI-built LibreChat artifact (from build-librechat.yml) ──
+        if [[ -z "$SRC" ]]; then
+            local BUILD_URL="https://api.github.com/repos/${GH_USER}/${GH_REPO}/releases/tags/librechat-build"
+            local BUILD_JSON="" BUILD_DL=""
+            if BUILD_JSON=$(gh_curl "$BUILD_URL" 2>/dev/null); then
+                BUILD_DL=$(echo "$BUILD_JSON" | grep -o '"browser_download_url":[^"]*"[^"]*librechat-build.tar.gz"' | cut -d'"' -f4)
+            fi
+
+            if [[ -n "${BUILD_DL:-}" ]]; then
+                log "Downloading CI-built LibreChat..."
+                gh_curl -L -o "$TMP/build.tar.gz" "$BUILD_DL"
+                mkdir -p "$TMP/app"
+                tar xzf "$TMP/build.tar.gz" -C "$TMP/app"
+                SRC="$TMP/app"
+                VER=$(cat "$TMP/app/.version" 2>/dev/null || echo "ci-build")
+                log "Using CI build ${VER}"
+            else
+                warn "No CI build found — falling back to local git build"
+            fi
+        fi
+
+        # ── Fallback 2: clone LibreChat + build locally ──
         if [[ -z "$SRC" ]]; then
             local LC_REPO="${LIBRECHAT_REPO:-https://github.com/danny-avila/LibreChat.git}"
             local LC_BRANCH="${LIBRECHAT_BRANCH:-main}"
