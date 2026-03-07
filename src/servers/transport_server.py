@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-mcp = FastMCP("transport", description="Flight tracking and vessel positions")
+mcp = FastMCP("transport", instructions="Flight tracking and vessel positions")
 AIS_KEY = os.environ.get("AISSTREAM_API_KEY", "")
 
 

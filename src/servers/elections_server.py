@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-mcp = FastMCP("elections", description="Global elections and democracy data")
+mcp = FastMCP("elections", instructions="Global elections and democracy data")
 GOOGLE_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
 _WD_HEADERS = {"User-Agent": "TradingAssistant/1.0 (trading signals research)"}

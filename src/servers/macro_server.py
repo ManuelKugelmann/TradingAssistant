@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-mcp = FastMCP("macro", description="Macroeconomic indicators: FRED, World Bank, IMF")
+mcp = FastMCP("macro", instructions="Macroeconomic indicators: FRED, World Bank, IMF")
 FRED_KEY = os.environ.get("FRED_API_KEY", "")
 
 

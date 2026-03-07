@@ -406,6 +406,72 @@ class TestElectionsServer:
         result = await self.mod.us_voter_info("123 Main St")
         assert result["error"] == "GOOGLE_API_KEY not set"
 
+    @pytest.mark.asyncio
+    async def test_global_elections_wikidata(self):
+        resp = _mock_response({"results": {"bindings": [
+            {"electionLabel": {"value": "2025 German federal election"},
+             "countryLabel": {"value": "Germany"},
+             "date": {"value": "2025-02-23"},
+             "typeLabel": {"value": "general election"}}
+        ]}})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.global_elections(country="Germany", year="2025")
+        assert len(result) == 1
+        assert result[0]["country"] == "Germany"
+        url = client.get.call_args[0][0]
+        assert "wikidata.org" in url
+
+    @pytest.mark.asyncio
+    async def test_heads_of_state_params(self):
+        resp = _mock_response({"results": {"bindings": [
+            {"personLabel": {"value": "Friedrich Merz"},
+             "countryLabel": {"value": "Germany"},
+             "positionLabel": {"value": "Chancellor"},
+             "start": {"value": "2025-05-06"}}
+        ]}})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.heads_of_state(country="Germany")
+        assert result[0]["person"] == "Friedrich Merz"
+        assert result[0]["position"] == "Chancellor"
+
+    @pytest.mark.asyncio
+    async def test_eu_parliament_meps_country(self):
+        resp = _mock_response({"data": [{"id": "1", "name": "Test MEP"}]})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.eu_parliament_meps(country="DE")
+        params = client.get.call_args[1]["params"]
+        assert params["country-of-representation"] == "DE"
+        assert result["count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_eu_parliament_votes_year(self):
+        resp = _mock_response({"data": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.eu_parliament_votes(year="2024")
+        params = client.get.call_args[1]["params"]
+        assert params["year"] == "2024"
+
+    @pytest.mark.asyncio
+    async def test_us_representatives_missing_key(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "GOOGLE_KEY", "")
+        result = await self.mod.us_representatives("123 Main St")
+        assert result["error"] == "GOOGLE_API_KEY not set"
+
+    @pytest.mark.asyncio
+    async def test_us_representatives_calls_google(self):
+        resp = _mock_response({"offices": [], "officials": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.us_representatives("1600 Pennsylvania Ave")
+        url = client.get.call_args[0][0]
+        assert "representatives" in url
+        params = client.get.call_args[1]["params"]
+        assert params["address"] == "1600 Pennsylvania Ave"
+
 
 # ── Humanitarian Server ──────────────────────────
 
@@ -558,3 +624,60 @@ class TestWaterServer:
         params = client.get.call_args[1]["params"]
         assert params["area_type"] == "county"
         assert params["area"] == "06037"
+
+
+# ── Combined Server ─────────────────────────────
+
+
+class TestCombinedServer:
+    """Verify combined_server.py mounts all 12 domains with correct namespaces."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self, monkeypatch):
+        # Set all optional API keys so modules load cleanly
+        for key in ("GOOGLE_API_KEY", "CF_API_TOKEN", "AISSTREAM_API_KEY",
+                     "FRED_API_KEY", "EIA_API_KEY", "ACLED_API_KEY",
+                     "COMTRADE_API_KEY", "USDA_NASS_API_KEY"):
+            monkeypatch.setenv(key, "test")
+        # Clear cached modules to pick up env changes
+        for mod_name in list(sys.modules):
+            if mod_name.endswith("_server") or mod_name == "combined_server":
+                del sys.modules[mod_name]
+        import combined_server
+        self.mod = combined_server
+
+    def test_combined_server_imports(self):
+        assert self.mod.mcp is not None
+        assert self.mod.mcp.name == "trading-data"
+
+    @pytest.mark.asyncio
+    async def test_combined_server_tool_count(self):
+        tools = await self.mod.mcp.list_tools()
+        assert len(tools) == 43, f"Expected 43 tools, got {len(tools)}: {[t.name for t in tools]}"
+
+    @pytest.mark.asyncio
+    async def test_combined_server_namespaces(self):
+        tools = await self.mod.mcp.list_tools()
+        tool_names = {t.name for t in tools}
+        expected_prefixes = [
+            "weather_", "disaster_", "econ_", "agri_", "conflict_",
+            "commodity_", "health_", "politics_", "humanitarian_",
+            "transport_", "water_", "infra_"
+        ]
+        for prefix in expected_prefixes:
+            matching = [n for n in tool_names if n.startswith(prefix)]
+            assert matching, f"No tools found with prefix '{prefix}'"
+
+    @pytest.mark.asyncio
+    async def test_combined_server_specific_tools(self):
+        tools = await self.mod.mcp.list_tools()
+        tool_names = {t.name for t in tools}
+        must_have = [
+            "weather_forecast", "disaster_get_earthquakes", "econ_fred_series",
+            "agri_fao_data", "conflict_acled_events", "commodity_trade_flows",
+            "health_who_indicator", "politics_global_elections",
+            "humanitarian_unhcr_population", "transport_flights_in_area",
+            "water_streamflow", "infra_internet_traffic"
+        ]
+        for name in must_have:
+            assert name in tool_names, f"Missing tool: {name}"

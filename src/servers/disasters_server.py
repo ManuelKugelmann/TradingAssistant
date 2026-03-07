@@ -3,7 +3,7 @@ from fastmcp import FastMCP
 import httpx
 from datetime import datetime, timedelta, timezone
 
-mcp = FastMCP("disasters", description="Real-time earthquakes, disasters, natural events")
+mcp = FastMCP("disasters", instructions="Real-time earthquakes, disasters, natural events")
 
 
 @mcp.tool()

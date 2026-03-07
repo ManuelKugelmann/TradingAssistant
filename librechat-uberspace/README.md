@@ -1,4 +1,4 @@
-LibreChat deployment with 16 MCP servers: 3 utility (filesystem, memory, sqlite) + 1 signals store + 12 trading domain servers covering 75+ data sources. No Docker, no Meilisearch, no RAG, no Redis.
+LibreChat deployment with 5 MCP servers: 3 utility (filesystem, memory, sqlite) + 1 signals store + 1 combined trading-data server (12 domains, 75+ sources, 43 tools). No Docker, no Meilisearch, no RAG, no Redis.
 
 All scripts read from `deploy.conf` — edit once, applies everywhere.
 
@@ -13,7 +13,7 @@ All scripts read from `deploy.conf` — edit once, applies everywhere.
                                                        │ ├─ MCP: memory (JSONL)      │
                                                        │ ├─ MCP: sqlite              │
                                                        │ ├─ MCP: signals-store (Py)  │
-                                                       │ └─ MCP: 12 domain servers   │
+                                                       │ └─ MCP: trading-data (Py)   │
                                                        │                             │
                                                        │ git-sync cron ──push──▶ GitHub (private)
                                                        └─────────────────────────────┘
@@ -139,21 +139,10 @@ bash ~/LibreChat/scripts/setup-data-repo.sh
 
 ### Trading Signals Stack (requires `~/mcps/`)
 
-| MCP Server | Domain | Key Sources |
+| MCP Server | Purpose | Key Sources |
 |---|---|---|
 | `signals-store` | Central store | Profiles + MongoDB snapshots |
-| `weather` | Weather | Open-Meteo, NOAA SWPC |
-| `disasters` | Disasters | USGS, GDACS, NASA EONET |
-| `macro` | Economics | FRED, World Bank, IMF |
-| `agri` | Agriculture | FAOSTAT, USDA |
-| `conflict` | Security | UCDP, ACLED, OpenSanctions |
-| `commodities` | Commodities | UN Comtrade, EIA |
-| `health` | Health | WHO, disease.sh, OpenFDA |
-| `elections` | Politics | IFES, V-Dem, Google Civic |
-| `humanitarian` | Humanitarian | UNHCR, OCHA HDX |
-| `transport` | Transport | OpenSky, AIS Stream |
-| `water` | Water | USGS Water, Drought Monitor |
-| `infra` | Internet | Cloudflare Radar, RIPE |
+| `trading-data` | 12 domains combined (43 tools) | Weather, disasters, econ, agri, conflict, commodity, health, politics, humanitarian, transport, water, infra |
 
 ## Day-to-Day Operations
 
@@ -204,12 +193,12 @@ ta rb
 
 | Resource | Limit | Usage |
 |---|---|---|
-| RAM | 1.5 GB hard kill | ~500-800 MB (LibreChat) + ~50 MB per Python MCP |
+| RAM | 1.5 GB hard kill | ~500-800 MB (LibreChat) + ~100 MB (2 Python MCPs) |
 | Storage | 10 GB (expandable) | ~2 GB installed |
 | Node.js | 18, 20, 22 | Requires >=20 |
 | Docker | Not available | Not needed |
 
-**Note:** Running all 12 domain servers simultaneously may approach the RAM limit. Start with just the servers you need (weather, macro, disasters are good defaults). The signals store is lightweight and should always run.
+**Note:** All 12 domain servers run in a single combined process (~50-80 MB), well within RAM limits.
 
 ## Cost
 

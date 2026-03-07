@@ -20,7 +20,7 @@ import re
 from dotenv import load_dotenv
 load_dotenv()
 
-mcp = FastMCP("signals-store", description="Hybrid profile/snapshot store")
+mcp = FastMCP("signals-store", instructions="Hybrid profile/snapshot store")
 
 PROFILES = Path(os.environ.get("PROFILES_DIR", "./profiles"))
 _client = None

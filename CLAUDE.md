@@ -2,7 +2,7 @@
 
 ## Project
 
-**TradingAssistant** — An MCP-based trading signals platform deployed via LibreChat on Uberspace. 16 MCP servers total: 3 utility (filesystem, memory, sqlite) + 1 signals store + 12 trading domain servers covering 75+ data sources.
+**TradingAssistant** — An MCP-based trading signals platform deployed via LibreChat on Uberspace. 5 MCP servers: 3 utility (filesystem, memory, sqlite) + 1 signals store + 1 combined trading-data server (12 domains, 75+ sources, 43 tools).
 
 ## Naming Conventions
 
@@ -127,7 +127,7 @@ GitHub (TradingAssistant) ──tag──▶ CI builds bundle ──▶ GitHub R
                            │   ├─ MCP: memory      → ~/TradeAssistant_Data/memory.jsonl
                            │   ├─ MCP: sqlite      → ~/TradeAssistant_Data/data.db
                            │   ├─ MCP: signals-store (Python, profiles + snapshots)
-                           │   └─ MCP: 12 domain servers (Python)
+                           │   └─ MCP: trading-data (Python, 12 domains combined)
                            │
                            └─ cron (every 15 min) ──push──▶ GitHub (TradeAssistant_Data, private)
                                   │
@@ -151,10 +151,12 @@ GitHub (TradingAssistant) ──tag──▶ CI builds bundle ──▶ GitHub R
 - **Regions**: north_america, latin_america, europe, mena, sub_saharan_africa, south_asia, east_asia, southeast_asia, central_asia, oceania, arctic, antarctic, global
 
 ### Domain Servers (`src/servers/*.py`)
-- All use FastMCP framework
-- All use `httpx` for HTTP calls
+- 12 individual servers combined into one via `combined_server.py` using FastMCP `mount(namespace=)`
+- All use FastMCP framework + `httpx` for HTTP calls
+- Tool names are namespaced: `weather_forecast`, `econ_fred_series`, `disaster_get_earthquakes`, etc.
 - Most APIs are free/no-key; some need optional API keys (FRED, ACLED, EIA, etc.)
-- Registered as supervisord services on Uberspace (`mcp-weather`, `mcp-macro`, etc.)
+- Individual servers still work standalone for testing
+- Combined server spawned as single stdio child process by LibreChat
 
 ### deploy.conf (Central Config)
 All scripts source this file. Key variables:
@@ -302,7 +304,7 @@ Each entry: `{id, kind, name, region, tags?, sector?}`.
 **Completed**: Repo init, cleanup, LibreChat full integration, CI release workflow, `ta` ops tool, data repo automation, code review fixes (security + correctness), chart tool + HTTP endpoint, profile INDEX.json, API keys doc, setup doc, test suite (87 tests: 45 bats + 42 pytest) + CI
 
 **Next priorities (P0)**:
-- Validate all 12 domain servers run without errors
+- Validate combined trading-data server runs without errors
 - Test signals store against live Atlas M0
 - Populate profiles at scale (~200 countries, ~500 stocks, ~100 ETFs, ~75 sources)
 

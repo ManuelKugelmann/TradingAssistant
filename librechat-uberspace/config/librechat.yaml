@@ -73,122 +73,40 @@ mcpServers:
         Output the returned HTML directly as an artifact for interactive visualization.
       Use profiles for identity/exposure data. Use snapshots for measurements over time.
 
-  # ── Domain Servers (12 domains, 75+ sources) ──
+  # ── Domain Servers (12 domains, 75+ sources, combined into one process) ──
 
-  weather:
+  trading-data:
     command: __HOME__/mcps/venv/bin/python
     args:
-      - __HOME__/mcps/src/servers/weather_server.py
-    serverInstructions: |
-      Weather and space weather data. Sources: Open-Meteo (forecasts, historical),
-      NOAA SWPC (solar storms, geomagnetic). No API key needed.
-
-  disasters:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/disasters_server.py
-    serverInstructions: |
-      Natural disaster monitoring. Sources: USGS earthquakes, GDACS alerts,
-      NASA EONET events, NASA FIRMS fire data, EM-DAT. Mostly no key needed.
-
-  macro:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/macro_server.py
+      - __HOME__/mcps/src/servers/combined_server.py
     env:
       FRED_API_KEY: "${FRED_API_KEY}"
-    serverInstructions: |
-      Macroeconomic indicators. Sources: FRED (US), World Bank, IMF WEO,
-      ECB SDMX, OECD, Eurostat, BLS, Census. FRED needs free API key.
-
-  agri:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/agri_server.py
-    env:
       USDA_NASS_API_KEY: "${USDA_NASS_API_KEY}"
-    serverInstructions: |
-      Agriculture and food data. Sources: FAOSTAT, USDA NASS/FAS,
-      GIEWS price monitor, WASDE reports. USDA NASS needs free API key.
-
-  conflict:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/conflict_server.py
-    env:
       ACLED_API_KEY: "${ACLED_API_KEY}"
       ACLED_EMAIL: "${ACLED_EMAIL}"
-    serverInstructions: |
-      Conflict, sanctions, and security. Sources: UCDP (Uppsala conflict data),
-      ACLED (armed conflict events), OpenSanctions, SIPRI arms data.
-      ACLED needs free API key + email.
-
-  commodities:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/commodities_server.py
-    env:
       EIA_API_KEY: "${EIA_API_KEY}"
       COMTRADE_API_KEY: "${COMTRADE_API_KEY}"
-    serverInstructions: |
-      Commodity and trade data. Sources: UN Comtrade, EIA (energy),
-      LME metals, USDA commodity prices. EIA needs free API key.
-
-  health:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/health_server.py
-    serverInstructions: |
-      Health and disease data. Sources: WHO GHO, disease.sh (COVID/flu),
-      OpenFDA (drug events/recalls), ProMED, WAHIS (animal disease).
-
-  elections:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/elections_server.py
-    env:
       GOOGLE_API_KEY: "${GOOGLE_API_KEY}"
-    serverInstructions: |
-      Global elections and political data. Sources: Wikidata (global elections,
-      heads of state), EU Parliament (MEPs, votes), Google Civic (US reps),
-      ReliefWeb (election crisis reports). Covers all countries.
-
-  humanitarian:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/humanitarian_server.py
-    serverInstructions: |
-      Humanitarian data. Sources: UNHCR refugee statistics,
-      OCHA HDX datasets, ReliefWeb, IDMC displacement data.
-
-  transport:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/transport_server.py
-    env:
       AISSTREAM_API_KEY: "${AISSTREAM_API_KEY}"
-    serverInstructions: |
-      Transport and logistics. Sources: OpenSky Network (flights),
-      AIS Stream (ship tracking), MarineTraffic. AIS needs API key.
-
-  water:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/water_server.py
-    serverInstructions: |
-      Water resources and drought. Sources: USGS Water Services,
-      US Drought Monitor, GloFAS (flood awareness). No key needed.
-
-  infra:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/infra_server.py
-    env:
       CF_API_TOKEN: "${CF_API_TOKEN}"
     serverInstructions: |
-      Internet infrastructure. Sources: Cloudflare Radar (outages, traffic),
-      RIPE Atlas (network measurements), IODA (internet outages).
-      Cloudflare needs API token for some endpoints.
+      Combined trading data server — 43 tools across 12 namespaced domains.
+      All tools are prefixed by domain: weather_*, disaster_*, econ_*, etc.
+      Weather: weather_forecast, weather_historical_weather, weather_flood_forecast, weather_space_weather
+      Disaster: disaster_get_earthquakes, disaster_get_disasters, disaster_get_natural_events
+      Econ: econ_fred_series, econ_fred_search, econ_worldbank_indicator, econ_worldbank_search, econ_imf_data
+      Agri: agri_fao_datasets, agri_fao_data, agri_usda_crop, agri_usda_crop_progress
+      Conflict: conflict_ucdp_conflicts, conflict_acled_events, conflict_search_sanctions, conflict_military_spending
+      Commodity: commodity_trade_flows, commodity_energy_series
+      Health: health_who_indicator, health_disease_outbreaks, health_disease_tracker, health_fda_adverse_events
+      Politics: politics_global_elections, politics_heads_of_state, politics_eu_parliament_meps,
+        politics_eu_parliament_votes, politics_us_representatives, politics_us_voter_info, politics_election_reports
+      Humanitarian: humanitarian_unhcr_population, humanitarian_hdx_search, humanitarian_reliefweb_reports
+      Transport: transport_flights_in_area, transport_flight_history, transport_vessels_in_area
+      Water: water_streamflow, water_drought
+      Infra: infra_internet_traffic, infra_ripe_probes
+      Most APIs are free/no-key. Optional keys: FRED, USDA NASS, ACLED, EIA,
+      Comtrade, Google Civic, AIS Stream, Cloudflare.
 
 # ── Endpoints ───────────────────────────────
 # Configure your LLM providers here or in .env
