@@ -11,10 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "store"))
 from fastmcp import FastMCP
 
 mcp = FastMCP("trading",
-    instructions="Signals store (profiles + MongoDB snapshots + notes + risk gate) plus "
-                 "75+ data sources across 12 domains: weather, disaster, "
-                 "econ, agri, conflict, commodity, health, politics, humanitarian, "
-                 "transport, water, infra")
+    instructions="Trading signals: store (profiles, snapshots, notes, risk gate) + 12 OSINT data domains (75+ sources)")
 
 # Signals store (profiles, snapshots, charts, archival)
 from server import mcp as store

@@ -26,10 +26,7 @@ mcpServers:
       - -y
       - "@modelcontextprotocol/server-filesystem"
       - __HOME__/TradeAssistant_Data/files/
-    serverInstructions: |
-      Filesystem for persistent file storage.
-      Use for documents, research exports, CSV files, reports.
-      All files are git-versioned and synced to GitHub.
+    serverInstructions: "Persistent file storage (git-synced). For documents, exports, reports."
 
   memory:
     command: npx
@@ -38,10 +35,7 @@ mcpServers:
       - "@modelcontextprotocol/server-memory"
     env:
       MEMORY_FILE_PATH: __HOME__/TradeAssistant_Data/memory.jsonl
-    serverInstructions: |
-      Persistent memory as a knowledge graph.
-      Store entities (people, projects, preferences) and their relations.
-      Use for context that should persist across conversations.
+    serverInstructions: "Knowledge graph memory. Store entities, relations, preferences across conversations."
 
   sqlite:
     command: npx
@@ -49,10 +43,7 @@ mcpServers:
       - -y
       - mcp-sqlite
       - __HOME__/TradeAssistant_Data/data.db
-    serverInstructions: |
-      SQLite database for structured data.
-      Use for logs, research results, structured notes, transaction records.
-      Supports full SQL: CREATE TABLE, INSERT, SELECT, UPDATE, DELETE.
+    serverInstructions: "SQLite database for structured data. Full SQL supported."
 
   # ── Trading Server (signals store + 12 data domains, one process) ──
   # Runs as streamable-http so LibreChat injects per-user headers.
@@ -86,36 +77,14 @@ mcpServers:
         title: "Enable Live Trading"
         description: "Set to 'yes' to allow real trades. Leave blank for dry-run only (paper trading)."
     serverInstructions: |
-      Combined trading server — signals store (store_* prefix) + 12 data domains (40+ tools).
-      STORE (store_*): Profiles + MongoDB snapshots for trading signals.
-        Profiles: store_get_profile, store_put_profile, store_list_profiles, store_search_profiles
-          — for countries (DEU, USA), stocks (AAPL), ETFs, crypto, indices, sources.
-        Snapshots: store_snapshot, store_event, store_history, store_recent_events, store_trend, store_aggregate
-          — timeseries data in MongoDB Atlas (1yr TTL). Archive for long-term (no TTL).
-        Charts: store_chart(entity, type, fields, ...) returns complete Plotly HTML.
-          Output the returned HTML directly as an artifact for interactive visualization.
-        Use profiles for identity/exposure data. Use snapshots for measurements over time.
-        Notes (per-user): store_save_note, store_get_notes, store_update_note, store_delete_note
-          — personal plans, watchlists, journals. Only visible to the note owner.
-        Risk gate: store_risk_status — shows live trading status, daily limit, broker config.
-          All external trading actions pass through _risk_check() (dry-run default).
-          Users enable live trading via Settings > Plugins.
-      DATA DOMAINS — all tools prefixed by domain:
-      Weather: weather_forecast, weather_historical_weather, weather_flood_forecast, weather_space_weather
-      Disaster: disaster_get_earthquakes, disaster_get_disasters, disaster_get_natural_events
-      Econ: econ_fred_series, econ_fred_search, econ_worldbank_indicator, econ_worldbank_search, econ_imf_data
-      Agri: agri_fao_datasets, agri_fao_data, agri_usda_crop, agri_usda_crop_progress
-      Conflict: conflict_ucdp_conflicts, conflict_acled_events, conflict_search_sanctions, conflict_military_spending
-      Commodity: commodity_trade_flows, commodity_energy_series
-      Health: health_who_indicator, health_disease_outbreaks, health_disease_tracker, health_fda_adverse_events
-      Politics: politics_global_elections, politics_heads_of_state, politics_eu_parliament_meps,
-        politics_eu_parliament_votes, politics_us_representatives, politics_us_voter_info, politics_election_reports
-      Humanitarian: humanitarian_unhcr_population, humanitarian_hdx_search, humanitarian_reliefweb_reports
-      Transport: transport_flights_in_area, transport_flight_history, transport_vessels_in_area
-      Water: water_streamflow, water_drought
-      Infra: infra_internet_traffic, infra_ripe_probes
-      Most APIs are free/no-key. Optional keys: FRED, USDA NASS, ACLED, EIA,
-      Comtrade, Google Civic, AIS Stream, Cloudflare.
+      Trading signals server: store_* tools + 12 OSINT data domains.
+      STORE: Profile = what an entity IS (JSON on disk). Snapshot = what was MEASURED when (MongoDB timeseries).
+        store_chart returns Plotly HTML — output it directly as an artifact.
+        Notes (store_save_note etc.) are per-user — plans, watchlists, journals.
+        Risk gate: dry-run by default. Users enable live trading in Settings > Plugins.
+      DATA: Tools prefixed by domain (weather_, disaster_, econ_, agri_, conflict_,
+        commodity_, health_, politics_, humanitarian_, transport_, water_, infra_).
+        Most free/no-key. Some need optional keys (FRED, ACLED, EIA, etc.).
 
 # ── Endpoints ───────────────────────────────
 # Configure your LLM providers here or in .env

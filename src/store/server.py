@@ -285,9 +285,7 @@ def _lint_one(kind: str, id: str, data: dict, schema: dict | None) -> list[str]:
 
 @mcp.tool()
 def get_profile(kind: str, id: str, region: str = "") -> dict:
-    """Read a profile. If region omitted, searches all regions.
-    kind: countries, stocks, etfs, crypto, indices, sources,
-    commodities, crops, materials, products, companies."""
+    """Read a profile. Searches all regions if region omitted."""
     if not _SAFE_ID.match(id):
         return {"error": f"invalid id: {id}"}
     if kind not in VALID_KINDS:
@@ -306,10 +304,7 @@ def get_profile(kind: str, id: str, region: str = "") -> dict:
 @mcp.tool()
 def put_profile(kind: str, id: str, data: dict,
                 region: str = "global") -> dict:
-    """Create or merge a profile. Shallow-merges with existing.
-    region: geographic folder (e.g. europe, north_america, global).
-    Defaults to 'global'. If profile already exists in another region,
-    updates it there instead."""
+    """Create or merge a profile. Shallow-merges with existing. Updates in-place if found in another region."""
     if not _SAFE_ID.match(id):
         return {"error": f"invalid id: {id}"}
     if kind not in VALID_KINDS:
@@ -333,8 +328,7 @@ def put_profile(kind: str, id: str, data: dict,
 
 @mcp.tool()
 def list_profiles(kind: str, region: str = "") -> list[dict]:
-    """List all profiles for a kind. Optionally filter by region.
-    Returns [{id, name, region}, ...]."""
+    """List profiles for a kind, optionally filtered by region."""
     if kind not in VALID_KINDS:
         return []
     regions_to_scan = [region] if region else _regions()
@@ -357,9 +351,7 @@ def list_profiles(kind: str, region: str = "") -> list[dict]:
 
 @mcp.tool()
 def find_profile(query: str, region: str = "") -> list[dict]:
-    """Find profiles by name, ID, or tag across all kinds and regions.
-    Case-insensitive partial match. Optionally filter by region.
-    Returns [{id, kind, name, region}, ...]."""
+    """Cross-kind search by name, ID, or tag. Case-insensitive partial match."""
     q = query.lower()
     index = _load_all_indexes()
     if not index:
@@ -379,8 +371,7 @@ def find_profile(query: str, region: str = "") -> list[dict]:
 @mcp.tool()
 def search_profiles(kind: str, field: str, value: str,
                     region: str = "") -> list[dict]:
-    """Search profiles by dot-path field (e.g. 'exposure.countries', 'tags').
-    Optionally filter by region."""
+    """Search by dot-path field value (e.g. field='exposure.countries', value='USA')."""
     results = []
     for entry in list_profiles(kind, region):
         prof = get_profile(kind, entry["id"])
@@ -404,7 +395,7 @@ def search_profiles(kind: str, field: str, value: str,
 
 @mcp.tool()
 def list_regions() -> list[dict]:
-    """List all geographic regions and the kinds they contain."""
+    """List geographic regions and their profile kinds."""
     result = []
     for region in _regions():
         rd = PROFILES / region
@@ -418,8 +409,7 @@ def list_regions() -> list[dict]:
 
 @mcp.tool()
 def rebuild_index(kind: str | None = None) -> dict:
-    """Force full rebuild of INDEX_{kind}.json from profile files on disk.
-    If kind given, rebuild only that kind. Otherwise rebuild all."""
+    """Rebuild INDEX files from disk. One kind if specified, else all."""
     if kind:
         entries = _rebuild_kind_index(kind)
         return {"status": "ok", "kind": kind, "entries": len(entries)}
@@ -429,9 +419,7 @@ def rebuild_index(kind: str | None = None) -> dict:
 
 @mcp.tool()
 def lint_profiles(kind: str | None = None, id: str | None = None) -> dict:
-    """Validate profiles against their schema. Check required fields and types.
-    If kind+id given, lint one. If only kind, lint all of that kind.
-    If neither, lint everything. Returns {ok: [...], issues: {id: [...]}}."""
+    """Validate profiles against schema. Scope: kind+id, kind only, or all."""
     results: dict = {"ok": [], "issues": {}}
     targets: list[tuple[str, str]] = []
     if kind and id:
@@ -467,12 +455,7 @@ def lint_profiles(kind: str | None = None, id: str | None = None) -> dict:
 def snapshot(kind: str, entity: str, type: str, data: dict,
              region: str = "", source: str = "", ts: str = "",
              lon: float | None = None, lat: float | None = None) -> dict:
-    """Store a timestamped snapshot. Goes into snap_{kind} collection.
-    kind: profile kind (stocks, countries, etc.).
-    entity: profile ID (e.g. 'DEU', 'AAPL').
-    type: data category (indicators, price, fundamentals).
-    region: geographic region key (same as profile region).
-    lon/lat: optional coordinates for geo queries."""
+    """Store a timestamped data point. type: indicators, price, fundamentals, etc."""
     if kind not in VALID_KINDS:
         return {"error": f"unknown kind: {kind}"}
     now = datetime.now(timezone.utc)
@@ -498,8 +481,7 @@ def event(subtype: str, summary: str, data: dict,
           entities: list[str] | None = None, region: str = "",
           source: str = "", ts: str = "",
           lon: float | None = None, lat: float | None = None) -> dict:
-    """Log a signal event. severity: low, medium, high, critical.
-    region: geographic region key. lon/lat: optional coordinates."""
+    """Log a signal event. severity: low/medium/high/critical."""
     now = datetime.now(timezone.utc)
     meta = {
         "type": "event",
@@ -529,8 +511,7 @@ def event(subtype: str, summary: str, data: dict,
 def history(kind: str, entity: str, type: str = "",
             region: str = "", after: str = "", before: str = "",
             limit: int = 100) -> list[dict]:
-    """Get snapshot history for an entity. Newest first.
-    kind: profile kind. Optionally filter by region and time range."""
+    """Snapshot history for an entity. Newest first. after/before: ISO dates."""
     if kind not in VALID_KINDS:
         return [{"error": f"unknown kind: {kind}"}]
     q: dict = {"meta.entity": entity}
@@ -552,7 +533,7 @@ def history(kind: str, entity: str, type: str = "",
 def recent_events(subtype: str = "", severity: str = "",
                   region: str = "", countries: list[str] | None = None,
                   days: int = 30, limit: int = 50) -> list[dict]:
-    """Query recent events. Optionally filter by region."""
+    """Recent signal events, filtered by subtype/severity/region."""
     q: dict = {
         "ts": {"$gte": datetime.now(timezone.utc) - timedelta(days=days)},
     }
@@ -572,8 +553,7 @@ def recent_events(subtype: str = "", severity: str = "",
 def nearby(kind: str, lon: float, lat: float,
            max_km: float = 500, type: str = "",
            limit: int = 50) -> list[dict]:
-    """Find snapshots or events near a geographic point.
-    kind: profile kind or 'events'. max_km: search radius."""
+    """Geo proximity search. kind: profile kind or 'events'."""
     q: dict = {
         "location": {
             "$nearSphere": {
@@ -596,8 +576,7 @@ def nearby(kind: str, lon: float, lat: float,
 @mcp.tool()
 def trend(kind: str, entity: str, type: str, field: str,
           periods: int = 12) -> list[dict]:
-    """Extract a single field's trend over time.
-    field: key in data, e.g. 'gdp_growth_pct' or 'close'."""
+    """Extract a field's trend over time (e.g. field='gdp_growth_pct')."""
     if kind not in VALID_KINDS:
         return [{"error": f"unknown kind: {kind}"}]
     pipeline = [
@@ -634,8 +613,7 @@ def _has_blocked_stage(obj) -> bool:
 @mcp.tool()
 def aggregate(kind: str, pipeline: list[dict],
               archive: bool = False) -> list[dict]:
-    """Run a read-only MongoDB aggregation pipeline on a kind's collection.
-    kind: profile kind or 'events'. archive: query arch_{kind} instead."""
+    """Read-only MongoDB aggregation. kind: profile kind or 'events'."""
     if _has_blocked_stage(pipeline):
         return [{"error": "pipeline contains a blocked stage ($out, $merge, etc.)"}]
     if kind == "events":
@@ -662,9 +640,7 @@ Plotly.newPlot('c',{traces},{layout},{{responsive:true}});
 def chart(kind: str, entity: str, type: str, fields: list[str],
           periods: int = 24, archive: bool = False,
           chart_type: str = "line", title: str = "") -> str:
-    """Generate an interactive Plotly HTML chart from timeseries data.
-    kind: profile kind. entity: e.g. 'DEU'. type: e.g. 'indicators'.
-    fields: data keys to plot. chart_type: 'line', 'bar', 'scatter'."""
+    """Plotly HTML chart from timeseries. chart_type: line/bar/scatter. Output HTML directly as artifact."""
     if kind not in VALID_KINDS:
         return f"Unknown kind: {kind}"
     col = _arch_col(kind) if archive else _snap_col(kind)
@@ -713,8 +689,7 @@ def chart(kind: str, entity: str, type: str, fields: list[str],
 @mcp.tool()
 def archive_snapshot(kind: str, entity: str, type: str, data: dict,
                      region: str = "", source: str = "", ts: str = "") -> dict:
-    """Store a long-term snapshot in arch_{kind} (no TTL).
-    For historical macro data, yearly GDP, quarterly earnings, etc."""
+    """Long-term archive snapshot (no TTL). For historical/yearly data."""
     if kind not in VALID_KINDS:
         return {"error": f"unknown kind: {kind}"}
     now = datetime.now(timezone.utc)
@@ -736,7 +711,7 @@ def archive_snapshot(kind: str, entity: str, type: str, data: dict,
 def archive_history(kind: str, entity: str, type: str = "",
                     region: str = "", after: str = "", before: str = "",
                     limit: int = 200) -> list[dict]:
-    """Query the kind's long-term archive. Optionally filter by region."""
+    """Query long-term archive for an entity."""
     if kind not in VALID_KINDS:
         return [{"error": f"unknown kind: {kind}"}]
     q: dict = {"meta.entity": entity}
@@ -757,8 +732,7 @@ def archive_history(kind: str, entity: str, type: str = "",
 @mcp.tool()
 def compact(kind: str, entity: str, type: str, older_than_days: int = 90,
             bucket: str = "month") -> dict:
-    """Downsample old snapshots into arch_{kind} by averaging numerics.
-    bucket: 'week', 'month', or 'quarter'."""
+    """Downsample old snapshots to archive. bucket: week/month/quarter."""
     if kind not in VALID_KINDS:
         return {"error": f"unknown kind: {kind}"}
     cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
@@ -863,8 +837,7 @@ def _notes_col():
 @mcp.tool()
 def save_note(title: str, content: str, tags: list[str] | None = None,
               kind: str = "note") -> dict:
-    """Save a personal note or trading plan. Scoped to the current user.
-    kind: 'note', 'plan', 'watchlist', 'journal'."""
+    """Save a personal note/plan/watchlist/journal (per-user)."""
     uid = _get_user_id()
     if not uid:
         return {"error": "user not identified (X-User-ID header missing)"}
@@ -884,7 +857,7 @@ def save_note(title: str, content: str, tags: list[str] | None = None,
 
 @mcp.tool()
 def get_notes(kind: str = "", tag: str = "", limit: int = 50) -> list[dict]:
-    """List your notes/plans. Optionally filter by kind or tag."""
+    """List your notes. Filter by kind or tag."""
     uid = _get_user_id()
     if not uid:
         return [{"error": "user not identified"}]
@@ -907,7 +880,7 @@ def get_notes(kind: str = "", tag: str = "", limit: int = 50) -> list[dict]:
 @mcp.tool()
 def update_note(note_id: str, content: str = "", title: str = "",
                 tags: list[str] | None = None) -> dict:
-    """Update an existing note. Only the owner can update."""
+    """Update a note (owner only)."""
     uid = _get_user_id()
     if not uid:
         return {"error": "user not identified"}
@@ -930,7 +903,7 @@ def update_note(note_id: str, content: str = "", title: str = "",
 
 @mcp.tool()
 def delete_note(note_id: str) -> dict:
-    """Delete a note. Only the owner can delete."""
+    """Delete a note (owner only)."""
     uid = _get_user_id()
     if not uid:
         return {"error": "user not identified"}
@@ -1011,8 +984,7 @@ def _risk_check(action: str, params: dict,
 
 @mcp.tool()
 def risk_status() -> dict:
-    """Show your risk gate status: live trading enabled, actions used, limit.
-    Settings are configured in LibreChat Settings > Plugins."""
+    """Risk gate status: live trading, actions used today, daily limit."""
     uid = _get_user_id()
     if not uid:
         return {"error": "user not identified"}
