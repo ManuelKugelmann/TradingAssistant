@@ -37,12 +37,12 @@ on cron, live chat assistant serves the user. Each layer can only see downward.
 │  L1  DATA AGENTS      │  Thematic data collection. Scrape MCPs, │
 │                       │  own profiles, snapshots, events.       │
 │  market-data          │  Also read from storage on request.     │
-│  osint-data           │  + filesystem, memory, sqlite           │
+│  osint-data           │  + filesystem, memory                   │
 │  signals-data         │                                         │
 ├───────────────────────┴─────────────────────────────────────────┤
 │  STORAGE              │  Profiles (JSON/git), Snapshots (Mongo), │
 │                       │  Notes (Mongo), Plans (Mongo),           │
-│                       │  Files, Memory, SQLite                   │
+│                       │  Files, Memory                           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -334,14 +334,14 @@ plan-executor).
     ┌────┴──────────────────┐     ▼        ▼        ▼
     │  L1 Data Agents       │─────────────────────────
     │  market-data          │  own: PROFILES, SNAPSHOTS, EVENTS
-    │  osint-data           │  + filesystem, memory, sqlite
+    │  osint-data           │  + filesystem, memory
     │  signals-data         │
     └───────┬───────────────┘
             ▼
     ┌───────────────────────────────────────────────┐
     │                   STORAGE                     │
     │  Profiles │ Snapshots │ Events │ Notes │ Plans│
-    │  Files    │ Memory    │ SQLite                │
+    │  Files    │ Memory                            │
     └───────────────────────────────────────────────┘
 ```
 
@@ -401,15 +401,15 @@ Storage is the shared bus. Analysts read raw data by handing off to data agents.
 
 ### Utility MCPs — Attached to Data Agents
 
-The utility MCPs (filesystem, memory, sqlite) are attached to the L1 data agents
-rather than having a separate utility agent. Data agents are already the storage
-experts.
+The trading store is the primary storage layer. Filesystem is secondary
+(for file exports/reports). Memory (knowledge graph) is useful for
+cross-conversation entity tracking. SQLite is not needed — the trading
+store's MongoDB backend covers structured queries via `store_aggregate`.
 
-| MCP | Attached To | Purpose |
-|-----|------------|---------|
-| filesystem | All L1 data agents | Git-synced file exports, reports |
-| memory | All L1 data agents | Knowledge graph across conversations |
-| sqlite | All L1 data agents | Ad-hoc structured queries, analytics |
+| MCP | Attached To | Purpose | Priority |
+|-----|------------|---------|----------|
+| filesystem | All L1 data agents | File exports, reports, documents | Secondary to trading store |
+| memory | All L1 data agents | Knowledge graph across conversations | Useful for entity relations |
 
 ---
 
@@ -433,10 +433,7 @@ mcpServers:
       MEMORY_FILE_PATH: __HOME__/TradeAssistant_Data/memory.jsonl
     chatMenu: false
 
-  sqlite:
-    command: npx
-    args: ["-y", "mcp-sqlite", "__HOME__/TradeAssistant_Data/data.db"]
-    chatMenu: false
+  # sqlite removed — trading store's MongoDB covers structured queries via store_aggregate
 
   trading:
     type: streamable-http
