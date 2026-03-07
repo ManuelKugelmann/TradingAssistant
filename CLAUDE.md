@@ -80,6 +80,20 @@ TradingAssistant/
 │       ├── setup.sh                   ← install/update with atomic swap
 │       └── setup-data-repo.sh         ← data repo init + cron sync
 │
+├── tests/
+│   ├── conftest.py                    ← pytest conftest (mocks pymongo/fastmcp)
+│   ├── helpers/
+│   │   └── setup.bash                 ← shared bats helpers (sandbox, stubs)
+│   ├── test_bootstrap.bats            ← syntax validation for all scripts
+│   ├── test_deploy_conf.bats          ← config loading, env overrides
+│   ├── test_nightly_commit.bats       ← profile staging, no-op when clean
+│   ├── test_setup.bats                ← install/update modes, .env generation
+│   ├── test_setup_data_repo.bats      ← data repo init, cron setup, idempotency
+│   ├── test_store.py                  ← pytest: profile CRUD, index, lint, search
+│   ├── test_ta_cron.bats              ← data sync, profile auto-commit
+│   ├── test_ta_dispatch.bats          ← help, status, version, restart, rollback
+│   └── test_ta_sync.bats             ← sync commit/push logic
+│
 ├── scripts/
 │   ├── bootstrap-uberspace.sh         ← legacy bootstrap
 │   └── nightly-git-commit.sh          ← nightly profile commit
@@ -93,7 +107,8 @@ TradingAssistant/
 │   └── uberspace-deployment.md        ← deployment notes
 │
 └── .github/workflows/
-    └── release.yml                    ← CI: tag push → build bundle → GitHub Release
+    ├── release.yml                    ← CI: tag push → build bundle → GitHub Release
+    └── tests.yml                      ← CI: bats tests + ShellCheck on push/PR
 ```
 
 ## Architecture
@@ -284,7 +299,7 @@ Each entry: `{id, kind, name, region, tags?, sector?}`.
 
 ## Current Status (see TODO.md)
 
-**Completed**: Repo init, cleanup, LibreChat full integration, CI release workflow, `ta` ops tool, data repo automation, code review fixes (security + correctness), chart tool + HTTP endpoint, profile INDEX.json, API keys doc, setup doc
+**Completed**: Repo init, cleanup, LibreChat full integration, CI release workflow, `ta` ops tool, data repo automation, code review fixes (security + correctness), chart tool + HTTP endpoint, profile INDEX.json, API keys doc, setup doc, test suite (87 tests: 45 bats + 42 pytest) + CI
 
 **Next priorities (P0)**:
 - Validate all 12 domain servers run without errors
@@ -292,6 +307,81 @@ Each entry: `{id, kind, name, region, tags?, sector?}`.
 - Populate profiles at scale (~200 countries, ~500 stocks, ~100 ETFs, ~75 sources)
 
 **Not yet done**: End-to-end Uberspace deployment test (P4), periodic ingest scheduler (P1), alert/threshold system (P1)
+
+## Testing
+
+### Frameworks
+- **Shell scripts**: [bats-core](https://github.com/bats-core/bats-core) (Bash Automated Testing System) — 45 tests across 8 `.bats` files
+- **Python**: [pytest](https://docs.pytest.org/) — 42 tests in `test_store.py` for profile CRUD, index, lint, search logic
+- **Total**: 87 tests
+
+### Running Tests
+```bash
+# Run all shell tests
+bats tests/*.bats
+
+# Run all Python tests
+python -m pytest tests/test_store.py -v
+
+# Run everything
+bats tests/*.bats && python -m pytest tests/test_store.py -v
+
+# Run a specific bats file
+bats tests/test_ta_cron.bats
+
+# Syntax check only (fast)
+bash -n librechat-uberspace/scripts/TradeAssistant.sh
+```
+
+### Test Architecture
+
+**Shell tests (bats)**:
+- Each test gets a **sandboxed `$HOME`** via `mktemp -d` — no side effects on the real system
+- External commands (`supervisorctl`, `uberspace`, `hostname`, `crontab`) are **stubbed** with scripts prepended to `$PATH`
+- Git operations use **local bare repos** as fake remotes (no network needed)
+- SSH keys are pre-created to skip interactive prompts in `setup-data-repo.sh`
+- `$REAL_GIT` is saved before stubbing so git stubs can delegate non-intercepted calls
+
+**Python tests (pytest)**:
+- `conftest.py` mocks `pymongo` and `fastmcp` at import time — no MongoDB or MCP runtime needed
+- Tests exercise pure-Python profile, index, lint, and search logic from `src/store/server.py`
+- Each test gets a **temporary profiles directory** via `tmp_path` fixture with `monkeypatch`
+
+### Test Coverage
+
+| File | Tests | Framework | Covers |
+|------|-------|-----------|--------|
+| `test_store.py` | 42 | pytest | Profile CRUD, region discovery, path safety, index build/update, find/search, lint, schema validation |
+| `test_ta_dispatch.bats` | 10 | bats | `ta help`, `status`, `version`, `restart`, `rollback`, aliases |
+| `test_setup.bats` | 9 | bats | Install/update modes, `.env` generation, `librechat.yaml` templating, Node.js version check |
+| `test_ta_cron.bats` | 6 | bats | Data sync commits, profile auto-commit, schedule gating |
+| `test_setup_data_repo.bats` | 6 | bats | Directory structure, `.gitignore`, cron setup, idempotency |
+| `test_deploy_conf.bats` | 5 | bats | Config loading, env overrides, variable defaults |
+| `test_ta_sync.bats` | 3 | bats | Sync with/without git repo, commit + push behavior |
+| `test_nightly_commit.bats` | 3 | bats | Profile staging, no-op when clean, selective `git add` |
+| `test_bootstrap.bats` | 2 | bats | Syntax validation for all `.sh` files |
+
+### CI Integration (`.github/workflows/tests.yml`)
+Runs on every push to `main` and on PRs:
+- **shell-tests** job: installs bats from git, runs `bash -n` on all `.sh` files, then `bats tests/*.bats`
+- **python-tests** job: sets up Python 3.11, installs pytest, runs `pytest tests/test_store.py`
+- **shellcheck** job: runs ShellCheck at error severity on all scripts
+
+### Writing New Tests
+
+**Bats (shell)**:
+1. Create `tests/test_<name>.bats`
+2. Load helpers: `load helpers/setup`
+3. Use `setup()` / `teardown()` with `setup_sandbox` / `teardown_sandbox`
+4. Stub external commands with `stub_command "name" "body"` or write to `$STUBS_DIR/`
+5. Use `init_mock_git_repo "$dir"` to create test git repos
+6. Run `bats tests/test_<name>.bats` to verify
+
+**Pytest (Python)**:
+1. Add tests to `tests/test_store.py` (or create new `tests/test_<name>.py`)
+2. Use the `profiles_dir` fixture for a temp profiles directory
+3. Use the `store` fixture for access to `server.py` functions
+4. Run `python -m pytest tests/test_<name>.py -v` to verify
 
 ## Conventions
 

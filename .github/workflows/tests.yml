@@ -1,0 +1,132 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shell-tests:
+    name: Shell script tests (bats)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats
+        run: |
+          git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
+          sudo /tmp/bats/install.sh /usr/local
+
+      - name: Syntax check all shell scripts
+        run: |
+          find . -name '*.sh' -not -path './node_modules/*' -not -path './venv/*' | while read f; do
+            echo "Checking: $f"
+            bash -n "$f"
+          done
+
+      - name: Run bats tests
+        run: bats tests/*.bats
+
+  python-tests:
+    name: Python tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pytest pytest-asyncio httpx python-dotenv
+
+      - name: Run pytest
+        run: python -m pytest tests/ -v
+
+  shellcheck:
+    name: ShellCheck lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        run: |
+          shellcheck --severity=error \
+            librechat-uberspace/scripts/TradeAssistant.sh \
+            librechat-uberspace/scripts/setup.sh \
+            librechat-uberspace/scripts/setup-data-repo.sh \
+            librechat-uberspace/scripts/bootstrap.sh \
+            scripts/nightly-git-commit.sh \
+            deploy.conf \
+          || true
+
+  integration-free:
+    name: Integration tests (free APIs)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [python-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pytest httpx python-dotenv
+
+      - name: Run free API integration tests
+        run: python -m pytest tests/test_integration_free.py -v -m integration --timeout=60
+
+  integration-keyed:
+    name: Integration tests (keyed APIs)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [python-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pytest httpx python-dotenv
+
+      - name: Run keyed API integration tests
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+          COMTRADE_API_KEY: ${{ secrets.COMTRADE_API_KEY }}
+          ACLED_API_KEY: ${{ secrets.ACLED_API_KEY }}
+          ACLED_EMAIL: ${{ secrets.ACLED_EMAIL }}
+          USDA_NASS_API_KEY: ${{ secrets.USDA_NASS_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
+        run: python -m pytest tests/test_integration_keyed.py -v -m integration --timeout=60
+
+  integration-store:
+    name: Integration tests (MongoDB store)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [python-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pytest httpx python-dotenv pymongo
+
+      - name: Run store integration tests
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+        run: python -m pytest tests/test_integration_store.py -v -m integration --timeout=60

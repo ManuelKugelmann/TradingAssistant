@@ -16,7 +16,8 @@ async def fao_datasets() -> list:
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get(f"{BASE}/definitions/domain")
         r.raise_for_status()
-        return [{"code": d["code"], "label": d["label"]} for d in r.json()["data"]]
+        data = r.json().get("data", [])
+        return [{"code": d["code"], "label": d["label"]} for d in data]
 
 
 @mcp.tool()

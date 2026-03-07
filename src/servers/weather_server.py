@@ -46,15 +46,18 @@ async def flood_forecast(lat: float, lon: float, days: int = 7) -> dict:
 @mcp.tool()
 async def space_weather() -> dict:
     """Current space weather: Kp index, solar wind, geomagnetic storms."""
-    async with httpx.AsyncClient(timeout=30) as c:
-        kp = await c.get("https://services.swpc.noaa.gov/json/planetary_k_index_1m.json")
-        solar = await c.get("https://services.swpc.noaa.gov/json/solar_wind/plasma-7-day.json")
-        alerts = await c.get("https://services.swpc.noaa.gov/json/alerts.json")
-        return {
-            "kp_index": kp.json()[-5:] if kp.status_code == 200 else [],
-            "solar_wind": solar.json()[-5:] if solar.status_code == 200 else [],
-            "alerts": alerts.json()[:10] if alerts.status_code == 200 else [],
-        }
+    try:
+        async with httpx.AsyncClient(timeout=30) as c:
+            kp = await c.get("https://services.swpc.noaa.gov/json/planetary_k_index_1m.json")
+            solar = await c.get("https://services.swpc.noaa.gov/json/solar_wind/plasma-7-day.json")
+            alerts = await c.get("https://services.swpc.noaa.gov/json/alerts.json")
+            return {
+                "kp_index": kp.json()[-5:] if kp.status_code == 200 else [],
+                "solar_wind": solar.json()[-5:] if solar.status_code == 200 else [],
+                "alerts": alerts.json()[:10] if alerts.status_code == 200 else [],
+            }
+    except httpx.HTTPError as e:
+        return {"error": f"NOAA SWPC request failed: {e}"}
 
 
 if __name__ == "__main__":

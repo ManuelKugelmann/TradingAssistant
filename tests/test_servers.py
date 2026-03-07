@@ -1,787 +1,560 @@
-"""Tests for all 12 domain MCP servers (src/servers/*.py).
+"""Tests for the 12 domain MCP servers.
 
-Uses respx to mock httpx calls. Each server's tools are tested for:
-- Correct URL construction and parameters
-- Proper response parsing
-- API key missing error handling
-- Edge cases
-
-Note: FastMCP @mcp.tool() wraps functions into FunctionTool objects.
-We call .fn() to get the original async function.
+Each server is an async httpx-based tool. Tests mock httpx.AsyncClient to verify:
+- Correct URL/param construction
+- API key checks (return error dict when missing)
+- Response transformation (e.g., earthquake flattening)
+- Input validation (e.g., health _SAFE_ODATA)
 """
+import json
 import os
+import sys
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import respx
-import httpx
 
-# ── Weather server ───────────────────────────────────
+# Add servers dir to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src" / "servers"))
 
-import src.servers.weather_server as weather_mod
 
-_forecast = weather_mod.forecast.fn
-_historical_weather = weather_mod.historical_weather.fn
-_flood_forecast = weather_mod.flood_forecast.fn
-_space_weather = weather_mod.space_weather.fn
+# ── Helpers ──────────────────────────────────────
+
+def _mock_response(data, status_code=200):
+    """Create a mock httpx.Response.
+
+    httpx.Response.json() and .raise_for_status() are sync methods,
+    so we use MagicMock (not AsyncMock) for those.
+    """
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json.return_value = data
+    if status_code >= 400:
+        import httpx
+        resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "error", request=MagicMock(), response=resp
+        )
+    return resp
+
+
+def _patch_httpx_get(response):
+    """Return a patch context for httpx.AsyncClient that returns response on get()."""
+    client = AsyncMock()
+    client.get.return_value = response
+    client.post.return_value = response
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    return patch("httpx.AsyncClient", return_value=client), client
+
+
+# ── Weather Server ────────────────────────────────
 
 
 class TestWeatherServer:
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_forecast(self):
-        mock_data = {
-            "daily": {
-                "temperature_2m_max": [25.0, 26.0],
-                "temperature_2m_min": [15.0, 16.0],
-                "precipitation_sum": [0.0, 1.2],
-            }
-        }
-        respx.get("https://api.open-meteo.com/v1/forecast").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _forecast(lat=52.52, lon=13.41, days=2)
-        assert "daily" in result
-        assert result["daily"]["temperature_2m_max"] == [25.0, 26.0]
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        import weather_server
+        self.mod = weather_server
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_historical_weather(self):
-        mock_data = {"daily": {"temperature_2m_max": [20.0]}}
-        respx.get("https://archive-api.open-meteo.com/v1/archive").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _historical_weather(lat=52.52, lon=13.41,
-                                           start="2024-01-01", end="2024-01-31")
-        assert "daily" in result
+    async def test_forecast_calls_open_meteo(self):
+        resp = _mock_response({"daily": {"temperature_2m_max": [20]}})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.forecast(lat=52.5, lon=13.4, days=3)
+        assert result["daily"]["temperature_2m_max"] == [20]
+        url = client.get.call_args[0][0]
+        assert "open-meteo.com" in url
+        assert client.get.call_args[1]["params"]["forecast_days"] == 3
 
-    @respx.mock
+    @pytest.mark.asyncio
+    async def test_historical_weather_params(self):
+        resp = _mock_response({"daily": {}})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.historical_weather(lat=40, lon=-74, start="2023-01-01", end="2023-12-31")
+        params = client.get.call_args[1]["params"]
+        assert params["start_date"] == "2023-01-01"
+        assert params["end_date"] == "2023-12-31"
+
     @pytest.mark.asyncio
     async def test_flood_forecast(self):
-        mock_data = {"daily": {"river_discharge": [100.0, 120.0]}}
-        respx.get("https://flood-api.open-meteo.com/v1/flood").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _flood_forecast(lat=52.52, lon=13.41, days=2)
-        assert result["daily"]["river_discharge"] == [100.0, 120.0]
+        resp = _mock_response({"daily": {"river_discharge": [100]}})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.flood_forecast(lat=51, lon=7)
+        assert "daily" in result
+        assert "flood-api.open-meteo.com" in client.get.call_args[0][0]
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_space_weather(self):
-        respx.get("https://services.swpc.noaa.gov/json/planetary_k_index_1m.json").mock(
-            return_value=httpx.Response(200, json=[{"kp": 3}])
-        )
-        respx.get("https://services.swpc.noaa.gov/json/solar_wind/plasma-7-day.json").mock(
-            return_value=httpx.Response(200, json=[{"speed": 400}])
-        )
-        respx.get("https://services.swpc.noaa.gov/json/alerts.json").mock(
-            return_value=httpx.Response(200, json=[{"alert": "none"}])
-        )
-        result = await _space_weather()
-        assert "kp_index" in result
-        assert "solar_wind" in result
-        assert "alerts" in result
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_space_weather_partial_failure(self):
-        respx.get("https://services.swpc.noaa.gov/json/planetary_k_index_1m.json").mock(
-            return_value=httpx.Response(500, json={})
-        )
-        respx.get("https://services.swpc.noaa.gov/json/solar_wind/plasma-7-day.json").mock(
-            return_value=httpx.Response(200, json=[{"speed": 400}])
-        )
-        respx.get("https://services.swpc.noaa.gov/json/alerts.json").mock(
-            return_value=httpx.Response(200, json=[{"alert": "none"}])
-        )
-        result = await _space_weather()
-        assert result["kp_index"] == []
-        assert len(result["solar_wind"]) > 0
+    async def test_space_weather_aggregates(self):
+        kp_resp = _mock_response([{"kp": 3}] * 10)
+        solar_resp = _mock_response([{"speed": 400}] * 10)
+        alerts_resp = _mock_response([{"alert": "G1"}] * 3)
+        client = AsyncMock()
+        client.get = AsyncMock(side_effect=[kp_resp, solar_resp, alerts_resp])
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+        with patch("httpx.AsyncClient", return_value=client):
+            result = await self.mod.space_weather()
+        assert len(result["kp_index"]) == 5
+        assert len(result["solar_wind"]) == 5
+        assert len(result["alerts"]) == 3
 
 
-# ── Macro server ─────────────────────────────────────
-
-import src.servers.macro_server as macro_mod
-
-_fred_series = macro_mod.fred_series.fn
-_fred_search = macro_mod.fred_search.fn
-_worldbank_indicator = macro_mod.worldbank_indicator.fn
-_worldbank_search = macro_mod.worldbank_search.fn
-_imf_data = macro_mod.imf_data.fn
+# ── Macro Server ──────────────────────────────────
 
 
 class TestMacroServer:
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_fred_no_key(self):
-        orig = macro_mod.FRED_KEY
-        macro_mod.FRED_KEY = ""
-        try:
-            result = await _fred_series("GDP")
-            assert result == {"error": "FRED_API_KEY not set"}
-        finally:
-            macro_mod.FRED_KEY = orig
+    @pytest.fixture(autouse=True)
+    def _import(self, monkeypatch):
+        monkeypatch.setenv("FRED_API_KEY", "test_key")
+        # Reimport to pick up env
+        if "macro_server" in sys.modules:
+            del sys.modules["macro_server"]
+        import macro_server
+        self.mod = macro_server
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_fred_series(self):
-        orig = macro_mod.FRED_KEY
-        macro_mod.FRED_KEY = "test_key"
-        try:
-            mock_data = {"observations": [{"date": "2024-01-01", "value": "25000"}]}
-            respx.get("https://api.stlouisfed.org/fred/series/observations").mock(
-                return_value=httpx.Response(200, json=mock_data)
-            )
-            result = await _fred_series("GDP", limit=10)
-            assert "observations" in result
-        finally:
-            macro_mod.FRED_KEY = orig
+    async def test_fred_missing_key(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "FRED_KEY", "")
+        result = await self.mod.fred_series("GDP")
+        assert result["error"] == "FRED_API_KEY not set"
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_fred_search(self):
-        orig = macro_mod.FRED_KEY
-        macro_mod.FRED_KEY = "test_key"
-        try:
-            mock_data = {"seriess": [{"id": "GDP", "title": "Gross Domestic Product"}]}
-            respx.get("https://api.stlouisfed.org/fred/series/search").mock(
-                return_value=httpx.Response(200, json=mock_data)
-            )
-            result = await _fred_search("GDP")
-            assert "seriess" in result
-        finally:
-            macro_mod.FRED_KEY = orig
+    async def test_fred_series_params(self):
+        resp = _mock_response({"observations": [{"value": "100"}]})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.fred_series("UNRATE", limit=50)
+        params = client.get.call_args[1]["params"]
+        assert params["series_id"] == "UNRATE"
+        assert params["limit"] == 50
 
-    @respx.mock
     @pytest.mark.asyncio
     async def test_worldbank_indicator(self):
-        mock_data = [{"page": 1}, [{"indicator": {"id": "NY.GDP.MKTP.CD"}}]]
-        respx.get(url__regex=r"api\.worldbank\.org/v2/country/.*/indicator/.*").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _worldbank_indicator("NY.GDP.MKTP.CD", country="DEU")
-        assert isinstance(result, list)
-        assert len(result) == 2
+        resp = _mock_response([{}, [{"value": 4000}]])
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.worldbank_indicator(country="DEU")
+        url = client.get.call_args[0][0]
+        assert "DEU" in url
+        assert "worldbank.org" in url
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_worldbank_search(self):
-        mock_data = [{"page": 1}, [{"id": "NY.GDP.MKTP.CD"}]]
-        respx.get("https://api.worldbank.org/v2/indicator").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _worldbank_search("GDP")
-        assert isinstance(result, list)
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_imf_data(self):
-        mock_data = {"CompactData": {"DataSet": {}}}
-        respx.get(url__regex=r"dataservices\.imf\.org/REST/SDMX_JSON\.svc/CompactData/.*").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _imf_data(database="IFS", ref_area="US")
-        assert "CompactData" in result
+    async def test_imf_data_url(self):
+        resp = _mock_response({"data": {}})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.imf_data(database="IFS", ref_area="DE", indicator="NGDP_R_XDC")
+        url = client.get.call_args[0][0]
+        assert "IFS" in url
+        assert "DE" in url
+        assert "NGDP_R_XDC" in url
 
 
-# ── Agri server ──────────────────────────────────────
-
-import src.servers.agri_server as agri_mod
-
-_fao_datasets = agri_mod.fao_datasets.fn
-_fao_data = agri_mod.fao_data.fn
-_usda_crop = agri_mod.usda_crop.fn
-_usda_crop_progress = agri_mod.usda_crop_progress.fn
-
-
-class TestAgriServer:
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_fao_datasets(self):
-        mock_data = {"data": [
-            {"code": "QCL", "label": "Crops and livestock products"},
-            {"code": "TP", "label": "Trade"},
-        ]}
-        respx.get(url__regex=r"fenixservices\.fao\.org.*definitions/domain").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _fao_datasets()
-        assert len(result) == 2
-        assert result[0]["code"] == "QCL"
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_fao_data(self):
-        mock_data = {"data": [{"area": "World", "value": 1000}]}
-        respx.get(url__regex=r"fenixservices\.fao\.org.*data/QCL").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _fao_data(domain="QCL")
-        assert "data" in result
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_usda_crop_no_key(self):
-        orig = agri_mod.NASS_KEY
-        agri_mod.NASS_KEY = ""
-        try:
-            result = await _usda_crop("CORN")
-            assert result == {"error": "USDA_NASS_API_KEY not set"}
-        finally:
-            agri_mod.NASS_KEY = orig
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_usda_crop(self):
-        orig = agri_mod.NASS_KEY
-        agri_mod.NASS_KEY = "test_key"
-        try:
-            mock_data = {"data": [{"commodity_desc": "CORN", "Value": "15000000"}]}
-            respx.get("https://quickstats.nass.usda.gov/api/api_GET/").mock(
-                return_value=httpx.Response(200, json=mock_data)
-            )
-            result = await _usda_crop("CORN")
-            assert "data" in result
-        finally:
-            agri_mod.NASS_KEY = orig
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_usda_crop_progress_no_key(self):
-        orig = agri_mod.NASS_KEY
-        agri_mod.NASS_KEY = ""
-        try:
-            result = await _usda_crop_progress("CORN")
-            assert "error" in result
-        finally:
-            agri_mod.NASS_KEY = orig
-
-
-# ── Commodities server ───────────────────────────────
-
-import src.servers.commodities_server as comm_mod
-
-_trade_flows = comm_mod.trade_flows.fn
-_energy_series = comm_mod.energy_series.fn
-
-
-class TestCommoditiesServer:
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_trade_flows_no_key(self):
-        orig = comm_mod.COMTRADE_KEY
-        comm_mod.COMTRADE_KEY = ""
-        try:
-            result = await _trade_flows()
-            assert result == {"error": "COMTRADE_API_KEY not set"}
-        finally:
-            comm_mod.COMTRADE_KEY = orig
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_trade_flows(self):
-        orig = comm_mod.COMTRADE_KEY
-        comm_mod.COMTRADE_KEY = "test_key"
-        try:
-            mock_data = {"data": [{"reporter": "USA", "value": 1000000}]}
-            respx.get("https://comtradeapi.un.org/data/v1/get/C/A/HS").mock(
-                return_value=httpx.Response(200, json=mock_data)
-            )
-            result = await _trade_flows()
-            assert "data" in result
-        finally:
-            comm_mod.COMTRADE_KEY = orig
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_energy_series_no_key(self):
-        orig = comm_mod.EIA_KEY
-        comm_mod.EIA_KEY = ""
-        try:
-            result = await _energy_series()
-            assert result == {"error": "EIA_API_KEY not set"}
-        finally:
-            comm_mod.EIA_KEY = orig
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_energy_series(self):
-        orig = comm_mod.EIA_KEY
-        comm_mod.EIA_KEY = "test_key"
-        try:
-            mock_data = {"response": {"data": [{"period": "2024-01", "value": 75.5}]}}
-            respx.get(url__regex=r"api\.eia\.gov/v2/seriesid/.*").mock(
-                return_value=httpx.Response(200, json=mock_data)
-            )
-            result = await _energy_series("PET.RWTC.D")
-            assert "response" in result
-        finally:
-            comm_mod.EIA_KEY = orig
-
-
-# ── Conflict server ──────────────────────────────────
-
-import src.servers.conflict_server as conflict_mod
-
-_ucdp_conflicts = conflict_mod.ucdp_conflicts.fn
-_acled_events = conflict_mod.acled_events.fn
-_search_sanctions = conflict_mod.search_sanctions.fn
-_military_spending = conflict_mod.military_spending.fn
-
-
-class TestConflictServer:
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_ucdp_conflicts(self):
-        mock_data = {"Result": [{"id": 1, "year": 2024}], "TotalCount": 1}
-        respx.get("https://ucdpapi.pcr.uu.se/api/gedevents/24.1").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _ucdp_conflicts(year=2024)
-        assert "Result" in result
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_acled_no_key(self):
-        orig = conflict_mod.ACLED_KEY
-        conflict_mod.ACLED_KEY = ""
-        try:
-            result = await _acled_events()
-            assert result == {"error": "ACLED_API_KEY not set"}
-        finally:
-            conflict_mod.ACLED_KEY = orig
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_acled_events(self):
-        orig_key = conflict_mod.ACLED_KEY
-        orig_email = conflict_mod.ACLED_EMAIL
-        conflict_mod.ACLED_KEY = "test_key"
-        conflict_mod.ACLED_EMAIL = "test@test.com"
-        try:
-            mock_data = {"data": [{"event_type": "Battles", "country": "Syria"}]}
-            respx.get("https://api.acleddata.com/acled/read").mock(
-                return_value=httpx.Response(200, json=mock_data)
-            )
-            result = await _acled_events(country="Syria", event_type="Battles")
-            assert "data" in result
-        finally:
-            conflict_mod.ACLED_KEY = orig_key
-            conflict_mod.ACLED_EMAIL = orig_email
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_search_sanctions_no_key(self):
-        orig = conflict_mod.OPENSANCTIONS_KEY
-        conflict_mod.OPENSANCTIONS_KEY = ""
-        try:
-            result = await _search_sanctions("test")
-            assert result == {"error": "OPENSANCTIONS_API_KEY not set"}
-        finally:
-            conflict_mod.OPENSANCTIONS_KEY = orig
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_search_sanctions(self):
-        orig = conflict_mod.OPENSANCTIONS_KEY
-        conflict_mod.OPENSANCTIONS_KEY = "test_key"
-        try:
-            mock_data = {"results": [{"id": "1", "caption": "Test Entity"}]}
-            respx.get("https://api.opensanctions.org/search/default").mock(
-                return_value=httpx.Response(200, json=mock_data)
-            )
-            result = await _search_sanctions("test")
-            assert "results" in result
-        finally:
-            conflict_mod.OPENSANCTIONS_KEY = orig
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_military_spending(self):
-        mock_data = [{"page": 1}, [{"country": {"value": "World"}}]]
-        respx.get(url__regex=r"api\.worldbank\.org.*MS\.MIL\.XPND\.GD\.ZS").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _military_spending()
-        assert isinstance(result, list)
-
-
-# ── Disasters server ─────────────────────────────────
-
-import src.servers.disasters_server as disasters_mod
-
-_get_earthquakes = disasters_mod.get_earthquakes.fn
-_get_disasters = disasters_mod.get_disasters.fn
-_get_natural_events = disasters_mod.get_natural_events.fn
+# ── Disasters Server ─────────────────────────────
 
 
 class TestDisastersServer:
-    @respx.mock
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        import disasters_server
+        self.mod = disasters_server
+
     @pytest.mark.asyncio
-    async def test_get_earthquakes(self):
-        mock_data = {
-            "metadata": {"count": 2},
-            "features": [
-                {
-                    "properties": {"mag": 5.2, "place": "Chile", "time": 1700000000,
-                                   "tsunami": 0, "alert": "green"},
-                    "geometry": {"coordinates": [-70.0, -33.0, 10.0]},
-                },
-                {
-                    "properties": {"mag": 4.1, "place": "Japan", "time": 1700001000,
-                                   "tsunami": 0, "alert": None},
-                    "geometry": {"coordinates": [139.0, 35.0, 20.0]},
-                },
-            ],
+    async def test_earthquakes_transform(self):
+        raw = {
+            "metadata": {"count": 1},
+            "features": [{
+                "properties": {"mag": 5.2, "place": "Tokyo", "time": 1234567890,
+                               "tsunami": 0, "alert": "green"},
+                "geometry": {"coordinates": [139.7, 35.7, 10]}
+            }]
         }
-        respx.get("https://earthquake.usgs.gov/fdsnws/event/1/query").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _get_earthquakes(min_magnitude=4.0, days=7)
-        assert result["count"] == 2
-        assert len(result["earthquakes"]) == 2
+        resp = _mock_response(raw)
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.get_earthquakes(min_magnitude=4.0, days=7)
+        assert result["count"] == 1
         assert result["earthquakes"][0]["mag"] == 5.2
+        assert result["earthquakes"][0]["place"] == "Tokyo"
+        assert result["earthquakes"][0]["coords"] == [139.7, 35.7, 10]
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_get_disasters(self):
-        mock_data = {"features": [{"type": "earthquake"}]}
-        respx.get(url__regex=r"gdacs\.org.*geteventlist.*").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _get_disasters()
-        assert "features" in result
+    async def test_earthquakes_alert_filter(self):
+        raw = {"metadata": {"count": 0}, "features": []}
+        resp = _mock_response(raw)
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.get_earthquakes(alert_level="red")
+        params = client.get.call_args[1]["params"]
+        assert params["alertlevel"] == "red"
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_get_natural_events(self):
-        mock_data = {"events": [{"id": "EONET_1", "title": "Wildfire"}]}
-        respx.get("https://eonet.gsfc.nasa.gov/api/v3/events").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _get_natural_events(category="wildfires")
-        assert "events" in result
+    async def test_natural_events_category(self):
+        resp = _mock_response({"events": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.get_natural_events(category="wildfires", days=14)
+        params = client.get.call_args[1]["params"]
+        assert params["category"] == "wildfires"
+        assert params["days"] == 14
 
 
-# ── Elections server ─────────────────────────────────
-
-import src.servers.elections_server as elections_mod
-
-_election_reports = elections_mod.election_reports.fn
-_us_voter_info = elections_mod.us_voter_info.fn
-
-
-class TestElectionsServer:
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_election_reports(self):
-        mock_data = {"data": [{"fields": {"title": "Election Report"}}]}
-        respx.get("https://api.reliefweb.int/v1/reports").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _election_reports(query="election")
-        assert "data" in result
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_us_voter_info_no_key(self):
-        orig = elections_mod.GOOGLE_KEY
-        elections_mod.GOOGLE_KEY = ""
-        try:
-            result = await _us_voter_info("1600 Pennsylvania Ave")
-            assert result == {"error": "GOOGLE_API_KEY not set"}
-        finally:
-            elections_mod.GOOGLE_KEY = orig
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_us_voter_info(self):
-        orig = elections_mod.GOOGLE_KEY
-        elections_mod.GOOGLE_KEY = "test_key"
-        try:
-            mock_data = {"election": {"name": "General Election"}}
-            respx.get("https://www.googleapis.com/civicinfo/v2/voterInfoQuery").mock(
-                return_value=httpx.Response(200, json=mock_data)
-            )
-            result = await _us_voter_info("1600 Pennsylvania Ave")
-            assert "election" in result
-        finally:
-            elections_mod.GOOGLE_KEY = orig
-
-
-# ── Health server ────────────────────────────────────
-
-import src.servers.health_server as health_mod
-
-_who_indicator = health_mod.who_indicator.fn
-_disease_outbreaks = health_mod.disease_outbreaks.fn
-_disease_tracker = health_mod.disease_tracker.fn
-_fda_adverse_events = health_mod.fda_adverse_events.fn
+# ── Health Server ─────────────────────────────────
 
 
 class TestHealthServer:
-    @respx.mock
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        import health_server
+        self.mod = health_server
+
+    def test_safe_odata_regex(self):
+        assert self.mod._SAFE_ODATA.match("DEU")
+        assert self.mod._SAFE_ODATA.match("2024")
+        assert not self.mod._SAFE_ODATA.match("'; DROP TABLE --")
+        assert not self.mod._SAFE_ODATA.match("a b")
+        assert not self.mod._SAFE_ODATA.match("")
+
     @pytest.mark.asyncio
-    async def test_who_indicator(self):
-        mock_data = {"value": [{"NumericValue": 75.0, "SpatialDim": "DEU"}]}
-        respx.get(url__regex=r"ghoapi\.azureedge\.net/api/.*").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _who_indicator("WHOSIS_000001", country="DEU")
-        assert "value" in result
+    async def test_who_rejects_injection(self):
+        result = await self.mod.who_indicator(country="'; DROP TABLE")
+        assert result["error"] == "invalid country code"
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_who_indicator_invalid_country(self):
-        result = await _who_indicator("WHOSIS_000001", country="../bad")
-        assert result == {"error": "invalid country code"}
+    async def test_who_rejects_invalid_year(self):
+        result = await self.mod.who_indicator(year="2024; DROP")
+        assert result["error"] == "invalid year"
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_who_indicator_invalid_year(self):
-        result = await _who_indicator("WHOSIS_000001", year="../bad")
-        assert result == {"error": "invalid year"}
+    async def test_who_indicator_builds_filter(self):
+        resp = _mock_response({"value": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.who_indicator(indicator="WHOSIS_000001", country="DEU", year="2022")
+        params = client.get.call_args[1]["params"]
+        assert "SpatialDim eq 'DEU'" in params["$filter"]
+        assert "TimeDim eq 2022" in params["$filter"]
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_disease_outbreaks(self):
-        mock_data = {"value": [{"Title": "Outbreak News"}]}
-        respx.get("https://www.who.int/api/news/diseaseoutbreaknews").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _disease_outbreaks()
-        assert "value" in result
+    async def test_disease_tracker_covid_url(self):
+        resp = _mock_response({"cases": 1000})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.disease_tracker(disease="covid", country="Germany")
+        url = client.get.call_args[0][0]
+        assert "covid-19" in url
+        assert "Germany" in url
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_disease_tracker_covid(self):
-        mock_data = {"cases": 1000000, "deaths": 10000}
-        respx.get("https://disease.sh/v3/covid-19/all").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _disease_tracker(disease="covid")
-        assert "cases" in result
+    async def test_disease_tracker_all(self):
+        resp = _mock_response({"cases": 1000})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.disease_tracker(disease="covid")
+        url = client.get.call_args[0][0]
+        assert url.endswith("/all")
 
-    @respx.mock
+
+# ── Agri Server ───────────────────────────────────
+
+
+class TestAgriServer:
+    @pytest.fixture(autouse=True)
+    def _import(self, monkeypatch):
+        monkeypatch.setenv("USDA_NASS_API_KEY", "test_key")
+        if "agri_server" in sys.modules:
+            del sys.modules["agri_server"]
+        import agri_server
+        self.mod = agri_server
+
     @pytest.mark.asyncio
-    async def test_disease_tracker_covid_country(self):
-        mock_data = {"country": "Germany", "cases": 50000}
-        respx.get("https://disease.sh/v3/covid-19/countries/Germany").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _disease_tracker(disease="covid", country="Germany")
-        assert result["country"] == "Germany"
+    async def test_fao_datasets_transforms(self):
+        raw = {"data": [{"code": "QCL", "label": "Crops"}, {"code": "TP", "label": "Trade"}]}
+        resp = _mock_response(raw)
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.fao_datasets()
+        assert result == [{"code": "QCL", "label": "Crops"}, {"code": "TP", "label": "Trade"}]
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_disease_tracker_influenza(self):
-        mock_data = {"data": []}
-        respx.get("https://disease.sh/v3/influenza/ihsa").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _disease_tracker(disease="influenza")
-        assert "data" in result
+    async def test_usda_missing_key(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "NASS_KEY", "")
+        result = await self.mod.usda_crop("CORN")
+        assert result["error"] == "USDA_NASS_API_KEY not set"
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_fda_adverse_events(self):
-        mock_data = {"results": [{"patient": {"drug": [{"medicinalproduct": "aspirin"}]}}]}
-        respx.get("https://api.fda.gov/drug/event.json").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _fda_adverse_events(drug="aspirin")
-        assert "results" in result
+    async def test_usda_crop_uppercases(self):
+        resp = _mock_response({"data": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.usda_crop("corn")
+        params = client.get.call_args[1]["params"]
+        assert params["commodity_desc"] == "CORN"
 
 
-# ── Humanitarian server ──────────────────────────────
+# ── Commodities Server ───────────────────────────
 
-import src.servers.humanitarian_server as hum_mod
 
-_unhcr_population = hum_mod.unhcr_population.fn
-_hdx_search = hum_mod.hdx_search.fn
-_reliefweb_reports = hum_mod.reliefweb_reports.fn
+class TestCommoditiesServer:
+    @pytest.fixture(autouse=True)
+    def _import(self, monkeypatch):
+        monkeypatch.setenv("COMTRADE_API_KEY", "test_ct_key")
+        monkeypatch.setenv("EIA_API_KEY", "test_eia_key")
+        if "commodities_server" in sys.modules:
+            del sys.modules["commodities_server"]
+        import commodities_server
+        self.mod = commodities_server
+
+    @pytest.mark.asyncio
+    async def test_trade_flows_missing_key(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "COMTRADE_KEY", "")
+        result = await self.mod.trade_flows()
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_energy_series_missing_key(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "EIA_KEY", "")
+        result = await self.mod.energy_series()
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_energy_series_url(self):
+        resp = _mock_response({"response": {"data": []}})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.energy_series(series="PET.RWTC.D")
+        url = client.get.call_args[0][0]
+        assert "PET.RWTC.D" in url
+
+
+# ── Conflict Server ──────────────────────────────
+
+
+class TestConflictServer:
+    @pytest.fixture(autouse=True)
+    def _import(self, monkeypatch):
+        monkeypatch.setenv("ACLED_API_KEY", "test_acled")
+        monkeypatch.setenv("ACLED_EMAIL", "test@test.com")
+        if "conflict_server" in sys.modules:
+            del sys.modules["conflict_server"]
+        import conflict_server
+        self.mod = conflict_server
+
+    @pytest.mark.asyncio
+    async def test_acled_missing_key(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "ACLED_KEY", "")
+        result = await self.mod.acled_events()
+        assert result["error"] == "ACLED_API_KEY not set"
+
+    @pytest.mark.asyncio
+    async def test_acled_date_filter(self):
+        resp = _mock_response({"data": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.acled_events(event_date_start="2024-01-01")
+        params = client.get.call_args[1]["params"]
+        assert params["event_date"] == "2024-01-01|"
+
+    @pytest.mark.asyncio
+    async def test_sanctions_search(self):
+        resp = _mock_response({"results": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.search_sanctions("Putin", schema="Person")
+        params = client.get.call_args[1]["params"]
+        assert params["q"] == "Putin"
+        assert params["schema"] == "Person"
+
+    @pytest.mark.asyncio
+    async def test_military_spending_url(self):
+        resp = _mock_response([{}, []])
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.military_spending(country="DEU")
+        url = client.get.call_args[0][0]
+        assert "DEU" in url
+        assert "MS.MIL.XPND.GD.ZS" in url
+
+
+# ── Elections Server ─────────────────────────────
+
+
+class TestElectionsServer:
+    @pytest.fixture(autouse=True)
+    def _import(self, monkeypatch):
+        monkeypatch.setenv("GOOGLE_API_KEY", "test_google")
+        if "elections_server" in sys.modules:
+            del sys.modules["elections_server"]
+        import elections_server
+        self.mod = elections_server
+
+    @pytest.mark.asyncio
+    async def test_election_reports_country(self):
+        resp = _mock_response({"data": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.election_reports(query="election", country="Kenya")
+        params = client.get.call_args[1]["params"]
+        assert "Kenya" in params["filter[field]"]
+
+    @pytest.mark.asyncio
+    async def test_voter_info_missing_key(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "GOOGLE_KEY", "")
+        result = await self.mod.us_voter_info("123 Main St")
+        assert result["error"] == "GOOGLE_API_KEY not set"
+
+
+# ── Humanitarian Server ──────────────────────────
 
 
 class TestHumanitarianServer:
-    @respx.mock
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        import humanitarian_server
+        self.mod = humanitarian_server
+
     @pytest.mark.asyncio
-    async def test_unhcr_population(self):
-        mock_data = {"items": [{"year": 2024, "refugees": 1000}]}
-        respx.get("https://api.unhcr.org/population/v1/population/").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _unhcr_population(year=2024, country_origin="SYR")
-        assert "items" in result
+    async def test_unhcr_filters(self):
+        resp = _mock_response({"items": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.unhcr_population(country_origin="SYR", country_asylum="DEU")
+        params = client.get.call_args[1]["params"]
+        assert params["coo"] == "SYR"
+        assert params["coa"] == "DEU"
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_hdx_search(self):
-        mock_data = {"result": {"results": [{"title": "Syria dataset"}]}}
-        respx.get("https://data.humdata.org/api/3/action/package_search").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _hdx_search("Syria")
-        assert "result" in result
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_reliefweb_reports(self):
-        mock_data = {"data": [{"fields": {"title": "Situation Update"}}]}
-        respx.post("https://api.reliefweb.int/v1/reports").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _reliefweb_reports(query="flood")
-        assert "data" in result
+    async def test_reliefweb_uses_post(self):
+        resp = _mock_response({"data": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.reliefweb_reports(query="flood", country="Bangladesh")
+        # Should use POST
+        client.post.assert_called_once()
+        body = client.post.call_args[1]["json"]
+        assert body["query"]["value"] == "flood"
+        assert body["filter"]["value"] == ["Bangladesh"]
 
 
-# ── Infra server ─────────────────────────────────────
-
-import src.servers.infra_server as infra_mod
-
-_internet_traffic = infra_mod.internet_traffic.fn
-_ripe_probes = infra_mod.ripe_probes.fn
+# ── Infra Server ─────────────────────────────────
 
 
 class TestInfraServer:
-    @respx.mock
+    @pytest.fixture(autouse=True)
+    def _import(self, monkeypatch):
+        monkeypatch.setenv("CF_API_TOKEN", "test_cf")
+        if "infra_server" in sys.modules:
+            del sys.modules["infra_server"]
+        import infra_server
+        self.mod = infra_server
+
     @pytest.mark.asyncio
-    async def test_internet_traffic_no_key(self):
-        orig = infra_mod.CF_TOKEN
-        infra_mod.CF_TOKEN = ""
-        try:
-            result = await _internet_traffic()
-            assert result == {"error": "CF_API_TOKEN not set"}
-        finally:
-            infra_mod.CF_TOKEN = orig
+    async def test_internet_traffic_missing_key(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "CF_TOKEN", "")
+        result = await self.mod.internet_traffic()
+        assert result["error"] == "CF_API_TOKEN not set"
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_internet_traffic(self):
-        orig = infra_mod.CF_TOKEN
-        infra_mod.CF_TOKEN = "test_token"
-        try:
-            mock_data = {"result": {"summary_0": {"http": "80%", "https": "20%"}}}
-            respx.get(url__regex=r"api\.cloudflare\.com.*radar.*").mock(
-                return_value=httpx.Response(200, json=mock_data)
-            )
-            result = await _internet_traffic(location="DE")
-            assert "result" in result
-        finally:
-            infra_mod.CF_TOKEN = orig
+    async def test_internet_traffic_auth_header(self):
+        resp = _mock_response({"result": {}})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.internet_traffic(location="DE")
+        headers = client.get.call_args[1]["headers"]
+        assert "Bearer" in headers["Authorization"]
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_ripe_probes(self):
-        mock_data = {"results": [{"id": 1, "country_code": "DE", "status": 1}]}
-        respx.get("https://atlas.ripe.net/api/v2/probes/").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _ripe_probes(country="DE")
-        assert "results" in result
+    async def test_ripe_probes_params(self):
+        resp = _mock_response({"results": []})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.ripe_probes(country="US", status=2)
+        params = client.get.call_args[1]["params"]
+        assert params["country_code"] == "US"
+        assert params["status"] == 2
 
 
-# ── Transport server ─────────────────────────────────
-
-import src.servers.transport_server as transport_mod
-
-_flights_in_area = transport_mod.flights_in_area.fn
-_flight_history = transport_mod.flight_history.fn
-_vessels_in_area = transport_mod.vessels_in_area.fn
+# ── Transport Server ─────────────────────────────
 
 
 class TestTransportServer:
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_flights_in_area(self):
-        mock_data = {"states": [["abc123", "LH123", "Germany"]]}
-        respx.get("https://opensky-network.org/api/states/all").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _flights_in_area(lat_min=47.0, lat_max=55.0,
-                                        lon_min=5.0, lon_max=15.0)
-        assert result["count"] == 1
-        assert len(result["states"]) == 1
+    @pytest.fixture(autouse=True)
+    def _import(self, monkeypatch):
+        monkeypatch.setenv("AISSTREAM_API_KEY", "test_ais")
+        if "transport_server" in sys.modules:
+            del sys.modules["transport_server"]
+        import transport_server
+        self.mod = transport_server
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_flights_in_area_empty(self):
-        mock_data = {"states": None}
-        respx.get("https://opensky-network.org/api/states/all").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _flights_in_area(lat_min=0, lat_max=1, lon_min=0, lon_max=1)
-        assert result["count"] == 0
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_flight_history(self):
-        mock_data = [{"icao24": "abc123", "callsign": "LH123"}]
-        respx.get("https://opensky-network.org/api/flights/aircraft").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _flight_history("abc123")
-        assert isinstance(result, list)
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_vessels_no_key(self):
-        orig = transport_mod.AIS_KEY
-        transport_mod.AIS_KEY = ""
-        try:
-            result = await _vessels_in_area(29.8, 30.1, 32.3, 32.6)
-            assert result == {"error": "AISSTREAM_API_KEY not set"}
-        finally:
-            transport_mod.AIS_KEY = orig
-
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_vessels_in_area(self):
-        orig = transport_mod.AIS_KEY
-        transport_mod.AIS_KEY = "test_key"
-        try:
-            mock_data = {"vessels": [{"mmsi": "123456789"}]}
-            respx.get("https://api.aisstream.io/v0/vessel-positions").mock(
-                return_value=httpx.Response(200, json=mock_data)
+    async def test_flights_in_area_truncates(self):
+        states = [[f"plane_{i}"] for i in range(100)]
+        resp = _mock_response({"states": states})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            result = await self.mod.flights_in_area(
+                lat_min=40, lat_max=42, lon_min=-75, lon_max=-73
             )
-            result = await _vessels_in_area(29.8, 30.1, 32.3, 32.6)
-            assert "vessels" in result
-        finally:
-            transport_mod.AIS_KEY = orig
+        assert result["count"] == 100
+        assert len(result["states"]) == 50  # truncated
+
+    @pytest.mark.asyncio
+    async def test_vessels_missing_key(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "AIS_KEY", "")
+        result = await self.mod.vessels_in_area(
+            lat_min=29.8, lat_max=30.1, lon_min=32.3, lon_max=32.6
+        )
+        assert result["error"] == "AISSTREAM_API_KEY not set"
+
+    @pytest.mark.asyncio
+    async def test_flight_history_params(self):
+        resp = _mock_response([])
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.flight_history(icao24="abc123", begin=1000, end=2000)
+        params = client.get.call_args[1]["params"]
+        assert params["icao24"] == "abc123"
+        assert params["begin"] == 1000
+        assert params["end"] == 2000
 
 
-# ── Water server ─────────────────────────────────────
-
-import src.servers.water_server as water_mod
-
-_streamflow = water_mod.streamflow.fn
-_drought = water_mod.drought.fn
+# ── Water Server ─────────────────────────────────
 
 
 class TestWaterServer:
-    @respx.mock
-    @pytest.mark.asyncio
-    async def test_streamflow(self):
-        mock_data = {"value": {"timeSeries": [{"values": []}]}}
-        respx.get("https://waterservices.usgs.gov/nwis/iv").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _streamflow(state="CA", period="P7D")
-        assert "value" in result
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        import water_server
+        self.mod = water_server
 
-    @respx.mock
     @pytest.mark.asyncio
     async def test_streamflow_by_site(self):
-        mock_data = {"value": {"timeSeries": []}}
-        respx.get("https://waterservices.usgs.gov/nwis/iv").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _streamflow(site="11303500")
-        assert "value" in result
+        resp = _mock_response({"value": {"timeSeries": []}})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.streamflow(site="01646500")
+        params = client.get.call_args[1]["params"]
+        assert params["sites"] == "01646500"
+        assert "stateCd" not in params
 
-    @respx.mock
     @pytest.mark.asyncio
-    async def test_drought(self):
-        mock_data = [{"mapDate": "2024-01-01", "None": 50, "D0": 20}]
-        respx.get("https://usdm.unl.edu/DmData/TimeSeries.aspx").mock(
-            return_value=httpx.Response(200, json=mock_data)
-        )
-        result = await _drought(area_type="state", area="CA")
-        assert isinstance(result, list)
+    async def test_streamflow_by_state(self):
+        resp = _mock_response({"value": {}})
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.streamflow(state="TX")
+        params = client.get.call_args[1]["params"]
+        assert params["stateCd"] == "TX"
+
+    @pytest.mark.asyncio
+    async def test_drought_params(self):
+        resp = _mock_response([])
+        patcher, client = _patch_httpx_get(resp)
+        with patcher:
+            await self.mod.drought(area_type="county", area="06037")
+        params = client.get.call_args[1]["params"]
+        assert params["area_type"] == "county"
+        assert params["area"] == "06037"

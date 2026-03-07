@@ -60,6 +60,15 @@ mv "$SRC" "$APP"
 
 for d in "${PERSIST[@]}"; do mkdir -p "$APP/$d"; done
 
+# ── Verify LibreChat app code is present ────
+# The release bundle must include pre-built LibreChat (built in CI).
+if [[ ! -f "$APP/api/server/index.js" ]]; then
+    # Rollback: restore previous version if it existed
+    rm -rf "$APP"
+    [[ -d "$BAK" ]] && mv "$BAK" "$APP"
+    die "LibreChat app code missing from bundle. Use a release built with CI (git tag + push)."
+fi
+
 # ── Copy default config if missing ──────────
 if [[ ! -f "$APP/librechat.yaml" ]] && [[ -f "$APP/config/librechat.yaml" ]]; then
     cp "$APP/config/librechat.yaml" "$APP/librechat.yaml"
@@ -146,7 +155,7 @@ command=node --max-old-space-size=1024 api/server/index.js
 environment=NODE_ENV=production
 autostart=true
 autorestart=true
-startsecs=10
+startsecs=60
 stopsignal=TERM
 stopwaitsecs=10
 EOF
@@ -172,8 +181,8 @@ EOF
     echo ""
     echo "     Required:"
     echo "       MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/LibreChat"
-    echo "       OPENAI_API_KEY=sk-..."
-    echo "       ANTHROPIC_API_KEY=sk-ant-..."
+    echo "       MONGO_URI_SIGNALS=mongodb+srv://user:pass@cluster.mongodb.net/signals"
+    echo "       OPENAI_API_KEY=sk-...  and/or  ANTHROPIC_API_KEY=sk-ant-..."
     echo ""
     echo -e "  ${YELLOW}2.${NC} Configure MCP servers (optional, defaults are fine):"
     echo "     nano $APP/librechat.yaml"

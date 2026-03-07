@@ -44,9 +44,9 @@ _SAFE_ID = re.compile(r'^[A-Za-z0-9_-]+$')
 def _db():
     global _client
     if not _client:
-        uri = os.environ.get("MONGO_URI")
+        uri = os.environ.get("MONGO_URI_SIGNALS") or os.environ.get("MONGO_URI")
         if not uri:
-            raise RuntimeError("MONGO_URI not set")
+            raise RuntimeError("MONGO_URI_SIGNALS (or MONGO_URI) not set")
         _client = MongoClient(uri)
     return _client.signals
 
@@ -107,7 +107,10 @@ def _ser(doc: dict) -> dict:
         if isinstance(doc.get(k), datetime):
             doc[k] = doc[k].isoformat()
     if "meta" in doc:
-        doc.update(doc.pop("meta"))
+        meta = doc.pop("meta")
+        for k, v in meta.items():
+            if k not in doc:
+                doc[k] = v
     return doc
 
 
@@ -594,15 +597,28 @@ _BLOCKED_STAGES = frozenset({
 })
 
 
+def _has_blocked_stage(obj) -> bool:
+    """Recursively check for blocked aggregation stages in nested pipelines."""
+    if isinstance(obj, dict):
+        for key, val in obj.items():
+            if key in _BLOCKED_STAGES:
+                return True
+            if _has_blocked_stage(val):
+                return True
+    elif isinstance(obj, list):
+        for item in obj:
+            if _has_blocked_stage(item):
+                return True
+    return False
+
+
 @mcp.tool()
 def aggregate(kind: str, pipeline: list[dict],
               archive: bool = False) -> list[dict]:
     """Run a read-only MongoDB aggregation pipeline on a kind's collection.
     kind: profile kind or 'events'. archive: query arch_{kind} instead."""
-    for stage in pipeline:
-        for key in stage:
-            if key in _BLOCKED_STAGES:
-                return [{"error": f"stage {key} is not allowed"}]
+    if _has_blocked_stage(pipeline):
+        return [{"error": "pipeline contains a blocked stage ($out, $merge, etc.)"}]
     if kind == "events":
         col = _events_col()
     elif kind in VALID_KINDS:
@@ -739,11 +755,17 @@ def compact(kind: str, entity: str, type: str, older_than_days: int = 90,
     if not sample:
         return {"status": "nothing_to_compact", "entity": entity, "type": type}
 
-    data_keys = list(sample.get("data", {}).keys())
+    sample_data = sample.get("data", {})
+    data_keys = list(sample_data.keys())
 
-    group_accumulators = {
-        k.replace(".", "_"): {"$avg": f"$data.{k}"} for k in data_keys
-    }
+    group_accumulators = {}
+    for k in data_keys:
+        safe_k = k.replace(".", "_")
+        val = sample_data[k]
+        if isinstance(val, (int, float)):
+            group_accumulators[safe_k] = {"$avg": f"$data.{k}"}
+        else:
+            group_accumulators[safe_k] = {"$first": f"$data.{k}"}
     group_accumulators["_source"] = {"$first": "$meta.source"}
     group_accumulators["_region"] = {"$first": "$meta.region"}
     group_accumulators["_count"] = {"$sum": 1}
@@ -784,7 +806,11 @@ def compact(kind: str, entity: str, type: str, older_than_days: int = 90,
             "data": d,
         })
 
-    _arch_col(kind).insert_many(archive_docs)
+    arch_result = _arch_col(kind).insert_many(archive_docs)
+    if len(arch_result.inserted_ids) != len(archive_docs):
+        return {"error": "partial archive insert — snapshots preserved",
+                "archived": len(arch_result.inserted_ids),
+                "expected": len(archive_docs)}
 
     result = snap.delete_many(
         {"meta.entity": entity, "meta.type": type, "ts": {"$lt": cutoff}}

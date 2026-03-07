@@ -37,6 +37,8 @@ async def reliefweb_reports(query: str = "", country: str = "",
     body = {"limit": limit, "sort": ["date:desc"]}
     if query:
         body["query"] = {"value": query}
+    if country:
+        body["filter"] = {"field": "country.name", "value": [country]}
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post("https://api.reliefweb.int/v1/reports",
                          json=body, params={"appname": "mcp"})
