@@ -77,13 +77,13 @@ mcpServers:
         title: "Enable Live Trading"
         description: "Set to 'yes' to allow real trades. Leave blank for dry-run only (paper trading)."
     serverInstructions: |
-      Trading signals server: store_* tools + 12 OSINT data domains.
+      Trading signals server: store_* tools + 9 OSINT data domains.
       STORE: Profile = what an entity IS (JSON on disk). Snapshot = what was MEASURED when (MongoDB timeseries).
         store_chart returns Plotly HTML — output it directly as an artifact.
         Notes (store_save_note etc.) are per-user — plans, watchlists, journals.
         Risk gate: dry-run by default. Users enable live trading in Settings > Plugins.
       DATA: Tools prefixed by domain (weather_, disaster_, econ_, agri_, conflict_,
-        commodity_, health_, politics_, humanitarian_, transport_, water_, infra_).
+        commodity_, health_, politics_, transport_).
         Most free/no-key. Some need optional keys (FRED, ACLED, EIA, etc.).
 
 # ── Endpoints ───────────────────────────────
