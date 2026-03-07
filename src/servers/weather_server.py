@@ -2,7 +2,7 @@
 from fastmcp import FastMCP
 import httpx
 
-mcp = FastMCP("weather", description="Global weather, climate, and space weather")
+mcp = FastMCP("weather", instructions="Global weather, climate, and space weather")
 
 
 @mcp.tool()

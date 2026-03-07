@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-mcp = FastMCP("conflict", description="Armed conflict, military, and sanctions data")
+mcp = FastMCP("conflict", instructions="Armed conflict, military, and sanctions data")
 ACLED_KEY = os.environ.get("ACLED_API_KEY", "")
 ACLED_EMAIL = os.environ.get("ACLED_EMAIL", "")
 

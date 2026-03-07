@@ -1,4 +1,4 @@
-LibreChat deployment with 16 MCP servers exposing 63+ tools: 3 utility (filesystem, memory, sqlite) + 1 signals store (20 tools) + 12 trading domain servers (43 tools across 75+ data sources). Each server is a single process with many tools — not one tool per server. No Docker, no Meilisearch, no RAG, no Redis.
+LibreChat deployment with 5 MCP servers exposing 63+ tools: 3 utility (filesystem, memory, sqlite) + 1 signals store (20 tools) + 1 combined trading-data server (12 domains, 43 tools, 75+ data sources). Each server is a single process with many tools. No Docker, no Meilisearch, no RAG, no Redis.
 
 All scripts read from `deploy.conf` — edit once, applies everywhere.
 
@@ -13,7 +13,7 @@ All scripts read from `deploy.conf` — edit once, applies everywhere.
                                                        │ ├─ MCP: memory (JSONL)      │
                                                        │ ├─ MCP: sqlite              │
                                                        │ ├─ MCP: signals-store (Py)  │
-                                                       │ └─ MCP: 12 domain servers   │
+                                                       │ └─ MCP: trading-data (Py)   │
                                                        │                             │
                                                        │ git-sync cron ──push──▶ GitHub (private)
                                                        └─────────────────────────────┘
@@ -139,23 +139,12 @@ bash ~/LibreChat/scripts/setup-data-repo.sh
 
 ### Trading Signals Stack (requires `~/mcps/`)
 
-Each entry below is **one MCP server process** exposing multiple tools. The signals store alone has 20 tools (profile CRUD, snapshots, charting, archival). Domain servers each expose 2-7 tools.
+Each entry below is **one MCP server process** exposing multiple tools.
 
-| MCP Server | Tools | Domain | Key Sources |
+| MCP Server | Tools | Purpose | Key Sources |
 |---|---|---|---|
 | `signals-store` | 20 | Central store | Profiles + MongoDB snapshots |
-| `weather` | 4 | Weather | Open-Meteo, NOAA SWPC |
-| `disasters` | 3 | Disasters | USGS, GDACS, NASA EONET |
-| `macro` | 5 | Economics | FRED, World Bank, IMF |
-| `agri` | 4 | Agriculture | FAOSTAT, USDA |
-| `conflict` | 4 | Security | UCDP, ACLED, OpenSanctions |
-| `commodities` | 2 | Commodities | UN Comtrade, EIA |
-| `health` | 4 | Health | WHO, disease.sh, OpenFDA |
-| `elections` | 7 | Politics | IFES, V-Dem, Google Civic |
-| `humanitarian` | 3 | Humanitarian | UNHCR, OCHA HDX |
-| `transport` | 3 | Transport | OpenSky, AIS Stream |
-| `water` | 2 | Water | USGS Water, Drought Monitor |
-| `infra` | 2 | Internet | Cloudflare Radar, RIPE |
+| `trading-data` | 43 | 12 domains combined via `mount()` | Weather, disasters, econ, agri, conflict, commodity, health, politics, humanitarian, transport, water, infra |
 
 ## Day-to-Day Operations
 
@@ -206,12 +195,12 @@ ta rb
 
 | Resource | Limit | Usage |
 |---|---|---|
-| RAM | 1.5 GB hard kill | ~500-800 MB (LibreChat) + ~50 MB per Python MCP |
+| RAM | 1.5 GB hard kill | ~500-800 MB (LibreChat) + ~100 MB (2 Python MCPs) |
 | Storage | 10 GB (expandable) | ~2 GB installed |
 | Node.js | 18, 20, 22 | Requires >=20 |
 | Docker | Not available | Not needed |
 
-**Note:** Running all 12 domain servers simultaneously may approach the RAM limit. Start with just the servers you need (weather, macro, disasters are good defaults). The signals store is lightweight and should always run.
+**Note:** All 12 domain servers run in a single combined process (~50-80 MB), well within RAM limits.
 
 ## Cost
 

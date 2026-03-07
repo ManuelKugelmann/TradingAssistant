@@ -352,7 +352,7 @@ uberspace web backend set / --http --port 3080
 | Node.js | 18, 20, 22 | Requires >=20 |
 | Docker | Not available | Not needed |
 
-Running all 12 domain servers simultaneously may approach the RAM limit. Start with just the ones you need — `weather`, `macro`, `disasters` are good defaults. The signals store is lightweight (~50 MB) and should always run — it is a single MCP server process that exposes 20 tools (profile CRUD, snapshots, charting, archival, geo queries).
+All 12 domain servers run in a single combined process (`trading-data`, ~50-80 MB) via FastMCP `mount()`, well within RAM limits. The signals store is a separate single process (~50 MB) exposing 20 tools. Total: 2 Python MCP servers, 63+ tools.
 
 ## Cost
 

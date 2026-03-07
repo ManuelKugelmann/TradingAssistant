@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-mcp = FastMCP("infra", description="Internet traffic, outages, BGP, latency")
+mcp = FastMCP("infra", instructions="Internet traffic, outages, BGP, latency")
 CF_TOKEN = os.environ.get("CF_API_TOKEN", "")
 
 

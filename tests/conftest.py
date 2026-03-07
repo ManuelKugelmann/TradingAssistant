@@ -13,14 +13,29 @@ if "fastmcp" not in sys.modules:
     mock_fastmcp = MagicMock()
 
     class _FakeMCP:
-        def __init__(self, *a, **kw):
-            pass
+        def __init__(self, name="", **kw):
+            self.name = name
+            self._tools = {}
 
         def tool(self, *a, **kw):
-            """Decorator that returns the function unchanged."""
+            """Decorator that registers and returns the function unchanged."""
             def decorator(fn):
+                self._tools[fn.__name__] = fn
                 return fn
             return decorator
+
+        def mount(self, child, namespace=""):
+            """Collect tools from child with namespace prefix."""
+            for name, fn in getattr(child, "_tools", {}).items():
+                prefixed = f"{namespace}_{name}" if namespace else name
+                self._tools[prefixed] = fn
+
+        async def list_tools(self):
+            """Return tool descriptors."""
+            class _ToolInfo:
+                def __init__(self, name):
+                    self.name = name
+            return [_ToolInfo(n) for n in sorted(self._tools)]
 
         def run(self, **kw):
             pass

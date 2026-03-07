@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-mcp = FastMCP("agri", description="FAO global agriculture + USDA crop data")
+mcp = FastMCP("agri", instructions="FAO global agriculture + USDA crop data")
 BASE = "https://fenixservices.fao.org/faostat/api/v1/en"
 NASS_KEY = os.environ.get("USDA_NASS_API_KEY", "")
 

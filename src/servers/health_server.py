@@ -3,7 +3,7 @@ from fastmcp import FastMCP
 import httpx
 import re
 
-mcp = FastMCP("health", description="Global health, disease outbreaks, FDA data")
+mcp = FastMCP("health", instructions="Global health, disease outbreaks, FDA data")
 
 _SAFE_ODATA = re.compile(r'^[A-Za-z0-9_-]+$')
 

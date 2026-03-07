@@ -2,7 +2,7 @@
 from fastmcp import FastMCP
 import httpx
 
-mcp = FastMCP("water", description="US water levels, drought, flood monitoring")
+mcp = FastMCP("water", instructions="US water levels, drought, flood monitoring")
 
 
 @mcp.tool()

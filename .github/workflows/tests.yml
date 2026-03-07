@@ -146,7 +146,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install pytest httpx
+        run: pip install pytest pytest-timeout httpx
 
       - name: Run LLM key validation tests
         env:
