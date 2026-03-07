@@ -75,7 +75,7 @@ Global roadmap and task list. Updated 2026-03-06.
 **Research/academic access — requires application:**
 
 - [ ] **ACLED_API_KEY + ACLED_EMAIL** — Armed Conflict Location & Event Data
-      Signup: https://developer.acleddata.com/
+      Signup: https://acleddata.com/register/
       Requires research justification. Used by `conflict_server` (`acled_events`).
 
 ---

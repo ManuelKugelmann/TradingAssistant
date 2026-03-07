@@ -17,7 +17,7 @@ All domain servers work partially without keys — tools that need a key return 
 | Variable | Service | Used by | Free tier | Signup |
 |----------|---------|---------|-----------|--------|
 | `FRED_API_KEY` | FRED (Federal Reserve) | macro_server | unlimited | https://fred.stlouisfed.org/docs/api/api_key.html |
-| `ACLED_API_KEY` | ACLED (armed conflict) | conflict_server | research access | https://developer.acleddata.com/ |
+| `ACLED_API_KEY` | ACLED (armed conflict) | conflict_server | research access | https://acleddata.com/register/ |
 | `ACLED_EMAIL` | ACLED (required with key) | conflict_server | — | same as above |
 | `OPENSANCTIONS_API_KEY` | OpenSanctions (entity search) | conflict_server | free tier | https://www.opensanctions.org/api/ |
 | `EIA_API_KEY` | EIA (US energy data) | commodities_server | unlimited | https://www.eia.gov/opendata/register.php |

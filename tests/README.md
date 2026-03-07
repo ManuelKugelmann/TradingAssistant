@@ -28,7 +28,7 @@ Add these secrets in **Settings > Secrets and variables > Actions > Repository s
 | Secret Name | Service | Required for | Signup URL |
 |-------------|---------|-------------|------------|
 | `FRED_API_KEY` | FRED (Federal Reserve) | `TestFredIntegration` | https://fred.stlouisfed.org/docs/api/api_key.html |
-| `ACLED_API_KEY` | ACLED (armed conflict) | `TestAcledIntegration` | https://developer.acleddata.com/ |
+| `ACLED_API_KEY` | ACLED (armed conflict) | `TestAcledIntegration` | https://acleddata.com/register/ |
 | `ACLED_EMAIL` | ACLED (paired with key) | `TestAcledIntegration` | same as above |
 | `EIA_API_KEY` | EIA (US energy data) | `TestEiaIntegration` | https://www.eia.gov/opendata/register.php |
 | `COMTRADE_API_KEY` | UN Comtrade (trade) | `TestComtradeIntegration` | https://comtradeplus.un.org/ |

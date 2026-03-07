@@ -46,7 +46,7 @@ FRED_API_KEY=           # https://fred.stlouisfed.org/docs/api/api_key.html
 EIA_API_KEY=            # https://www.eia.gov/opendata/register.php
 
 # Other optional keys (all free)
-ACLED_API_KEY=          # https://developer.acleddata.com/
+ACLED_API_KEY=          # https://acleddata.com/register/
 ACLED_EMAIL=
 COMTRADE_API_KEY=       # https://comtradeplus.un.org/TradeFlow
 GOOGLE_API_KEY=         # https://console.cloud.google.com/apis/credentials
