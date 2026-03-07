@@ -1,0 +1,99 @@
+# Build vanilla LibreChat and publish as a downloadable artifact.
+# Use instead of building locally on Uberspace (saves ~10 min + 2GB RAM).
+#
+# Trigger: manual (Actions → Run workflow) or on schedule (weekly).
+# Result:  librechat-build.tar.gz attached to the "librechat-build" release.
+#
+# Install via:  ta install          (auto-detected as fallback when no tagged release exists)
+# Or direct:    ta install dev      (skips tagged release, uses librechat-build)
+name: Build LibreChat
+
+on:
+  workflow_dispatch:
+    inputs:
+      librechat_ref:
+        description: "LibreChat branch or tag to build"
+        default: "main"
+        required: false
+  schedule:
+    # Weekly Monday 04:00 UTC — keep the build fresh
+    - cron: "0 4 * * 1"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Clone LibreChat
+        run: |
+          REF="${{ github.event.inputs.librechat_ref || 'main' }}"
+          echo "Building LibreChat ref: $REF"
+          git clone --depth 1 -b "$REF" https://github.com/danny-avila/LibreChat.git librechat-src
+          echo "LC_SHA=$(git -C librechat-src rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        working-directory: librechat-src
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: librechat-src
+        run: npm run frontend
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
+      - name: Assemble artifact
+        run: |
+          mkdir -p build
+
+          # Server + built client + runtime deps
+          cp -r librechat-src/api        build/api
+          cp -r librechat-src/client      build/client
+          cp -r librechat-src/packages    build/packages 2>/dev/null || true
+          cp -r librechat-src/node_modules build/node_modules
+          cp    librechat-src/package.json build/package.json
+
+          # Metadata
+          echo "dev-${LC_SHA}" > build/.version
+          date -u +%Y-%m-%dT%H:%M:%SZ > build/.build-date
+
+          tar czf librechat-build.tar.gz -C build .
+          echo "Build size: $(du -h librechat-build.tar.gz | cut -f1)"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: librechat-build
+          path: librechat-build.tar.gz
+          retention-days: 30
+
+      - name: Publish to librechat-build release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create or update the librechat-build release
+          TAG="librechat-build"
+          TITLE="LibreChat Build (dev-${LC_SHA})"
+          BODY="Vanilla LibreChat built from danny-avila/LibreChat@${LC_SHA} on $(date -u +%Y-%m-%d).
+
+          Download and extract to use as LibreChat installation — no local build needed.
+
+          **Usage:** \`ta install\` auto-detects this when no tagged release exists."
+
+          # Delete existing release + tag if present
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          git push origin ":refs/tags/$TAG" 2>/dev/null || true
+
+          # Create new release
+          gh release create "$TAG" \
+            --title "$TITLE" \
+            --notes "$BODY" \
+            --prerelease \
+            librechat-build.tar.gz

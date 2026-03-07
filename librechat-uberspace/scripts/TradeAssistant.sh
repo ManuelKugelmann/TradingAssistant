@@ -1,12 +1,16 @@
 #!/bin/bash
 # TradeAssistant ops — single entry point for install + daily ops
 #
-# Fresh install (one-liner):
+# Fresh install (one-liner, uses release bundle → falls back to git build):
 #   curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
+#
+# Force git-based build (no release needed):
+#   curl -sL .../TradeAssistant.sh | bash -s install dev
 #
 # After install:
 #   ta help              # show all commands
 #   ta install           # re-run full installer (idempotent)
+#   ta install dev       # force git-based build
 #
 # Installed as ~/bin/ta (shorthand) and ~/bin/TradeAssistant
 set -euo pipefail
@@ -48,8 +52,16 @@ fi
 
 # ═══════════════════════════════════════════════
 #  install — full install/update (idempotent)
+#    ta install           → release bundle (falls back to git)
+#    ta install dev       → force git-based build
+#    ta install --dev     → force git-based build
 # ═══════════════════════════════════════════════
 _do_install() {
+    local DEV_MODE=false
+    if [[ "${2:-}" == "dev" ]] || [[ "${2:-}" == "--dev" ]]; then
+        DEV_MODE=true
+    fi
+
     # Track whether .env files are new (need editing)
     local NEED_STACK_ENV=false
     local NEED_APP_ENV=false
@@ -135,10 +147,10 @@ SVCEOF
     uberspace web backend set /charts --http --port 8066 2>/dev/null || true
     log "Services registered (mcp-store, charts)"
 
-    # ── 6. LibreChat — try release bundle, fall back to local copy ──
+    # ── 6. LibreChat — try release bundle, fall back to git clone + build ──
     local NEED_LC_SETUP=false
 
-    if [[ -d "$APP" ]] && [[ -f "$APP/.version" ]]; then
+    if [[ -d "$APP" ]] && [[ -f "$APP/.version" ]] && [[ "$DEV_MODE" == false ]]; then
         log "LibreChat already installed ($(cat "$APP/.version"))"
     else
         NEED_LC_SETUP=true
@@ -147,23 +159,70 @@ SVCEOF
         TMP=$(mktemp -d)
         trap 'rm -rf "$TMP"' EXIT
 
-        # Try GitHub release first
-        local RELEASE_URL="https://api.github.com/repos/${GH_USER}/${GH_REPO}/releases/latest"
-        local JSON="" BUNDLE_URL="" VER=""
-        if JSON=$(gh_curl "$RELEASE_URL" 2>/dev/null); then
-            BUNDLE_URL=$(echo "$JSON" | grep -o '"browser_download_url":[^"]*"[^"]*librechat-bundle.tar.gz"' | cut -d'"' -f4)
-            VER=$(echo "$JSON" | grep -o '"tag_name":[^"]*"[^"]*"' | cut -d'"' -f4)
+        local VER="" SRC=""
+
+        if [[ "$DEV_MODE" == true ]]; then
+            log "Dev mode: skipping tagged release, trying CI build..."
+        else
+            # Try tagged GitHub release first (from release.yml)
+            local RELEASE_URL="https://api.github.com/repos/${GH_USER}/${GH_REPO}/releases/latest"
+            local JSON="" BUNDLE_URL=""
+            if JSON=$(gh_curl "$RELEASE_URL" 2>/dev/null); then
+                BUNDLE_URL=$(echo "$JSON" | grep -o '"browser_download_url":[^"]*"[^"]*librechat-bundle.tar.gz"' | cut -d'"' -f4)
+                VER=$(echo "$JSON" | grep -o '"tag_name":[^"]*"[^"]*"' | cut -d'"' -f4)
+            fi
+
+            if [[ -n "${BUNDLE_URL:-}" ]]; then
+                log "Downloading release ${VER}..."
+                gh_curl -L -o "$TMP/bundle.tar.gz" "$BUNDLE_URL"
+                mkdir -p "$TMP/app"
+                tar xzf "$TMP/bundle.tar.gz" -C "$TMP/app"
+                SRC="$TMP/app"
+            fi
         fi
 
-        if [[ -z "${BUNDLE_URL:-}" ]]; then
-            die "No release bundle found. Create a release first: git tag v0.1.0 && git push --tags"
+        # ── Fallback 1: CI-built LibreChat artifact (from build-librechat.yml) ──
+        if [[ -z "$SRC" ]]; then
+            local BUILD_URL="https://api.github.com/repos/${GH_USER}/${GH_REPO}/releases/tags/librechat-build"
+            local BUILD_JSON="" BUILD_DL=""
+            if BUILD_JSON=$(gh_curl "$BUILD_URL" 2>/dev/null); then
+                BUILD_DL=$(echo "$BUILD_JSON" | grep -o '"browser_download_url":[^"]*"[^"]*librechat-build.tar.gz"' | cut -d'"' -f4)
+            fi
+
+            if [[ -n "${BUILD_DL:-}" ]]; then
+                log "Downloading CI-built LibreChat..."
+                gh_curl -L -o "$TMP/build.tar.gz" "$BUILD_DL"
+                mkdir -p "$TMP/app"
+                tar xzf "$TMP/build.tar.gz" -C "$TMP/app"
+                SRC="$TMP/app"
+                VER=$(cat "$TMP/app/.version" 2>/dev/null || echo "ci-build")
+                log "Using CI build ${VER}"
+            else
+                warn "No CI build found — falling back to local git build"
+            fi
         fi
 
-        log "Downloading release ${VER}..."
-        gh_curl -L -o "$TMP/bundle.tar.gz" "$BUNDLE_URL"
-        mkdir -p "$TMP/app"
-        tar xzf "$TMP/bundle.tar.gz" -C "$TMP/app"
-        local SRC="$TMP/app"
+        # ── Fallback 2: clone LibreChat + build locally ──
+        if [[ -z "$SRC" ]]; then
+            local LC_REPO="${LIBRECHAT_REPO:-https://github.com/danny-avila/LibreChat.git}"
+            local LC_BRANCH="${LIBRECHAT_BRANCH:-main}"
+            log "Cloning LibreChat from ${LC_REPO} (branch: ${LC_BRANCH})..."
+            git clone --depth 1 -b "$LC_BRANCH" "$LC_REPO" "$TMP/librechat-src"
+
+            log "Installing npm dependencies (this may take a few minutes)..."
+            cd "$TMP/librechat-src"
+            npm ci --ignore-scripts 2>/dev/null || npm install 2>/dev/null || die "npm install failed"
+
+            log "Building LibreChat client..."
+            NODE_OPTIONS="--max-old-space-size=2048" npm run frontend 2>/dev/null || \
+                NODE_OPTIONS="--max-old-space-size=2048" npx react-scripts build 2>/dev/null || \
+                die "LibreChat build failed (need Node ${NODE_VERSION}+ and ~2GB RAM)"
+            cd - >/dev/null
+
+            SRC="$TMP/librechat-src"
+            VER="dev-$(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d)"
+            log "Built LibreChat ${VER} from source"
+        fi
 
         # ── 7. Run setup (handles install vs update, preserves .env) ──
         bash "$STACK/librechat-uberspace/scripts/setup.sh" "$SRC" "$VER"
@@ -321,7 +380,7 @@ case "$CMD" in
         echo -e "${GREEN}✓${NC} Updated to ${VER} via git pull"
         ;;
     install)
-        _do_install
+        _do_install "$@"
         ;;
     rb|rollback)
         if [[ ! -d "${APP}.prev" ]]; then
@@ -856,7 +915,8 @@ SVCEOF
         echo ""
         echo "  ta u|update     Update from latest GitHub release"
         echo "  ta pull         Quick update via git pull (dev)"
-        echo "  ta install      Re-run full installer (idempotent)"
+        echo "  ta install      Re-run full installer (idempotent, release → git fallback)"
+        echo "  ta install dev  Force git-based build (no release bundle needed)"
         echo "  ta rb|rollback  Rollback to previous version"
         echo ""
         echo "  ta sync         Force git sync of data dir"
