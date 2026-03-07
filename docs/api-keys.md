@@ -19,6 +19,7 @@ All domain servers work partially without keys — tools that need a key return 
 | `FRED_API_KEY` | FRED (Federal Reserve) | macro_server | unlimited | https://fred.stlouisfed.org/docs/api/api_key.html |
 | `ACLED_API_KEY` | ACLED (armed conflict) | conflict_server | research access | https://developer.acleddata.com/ |
 | `ACLED_EMAIL` | ACLED (required with key) | conflict_server | — | same as above |
+| `OPENSANCTIONS_API_KEY` | OpenSanctions (entity search) | conflict_server | free tier | https://www.opensanctions.org/api/ |
 | `EIA_API_KEY` | EIA (US energy data) | commodities_server | unlimited | https://www.eia.gov/opendata/register.php |
 | `COMTRADE_API_KEY` | UN Comtrade (trade flows) | commodities_server | 100 req/day | https://comtradeplus.un.org/TradeFlow |
 | `GOOGLE_API_KEY` | Google Civic Info | elections_server | generous | https://console.cloud.google.com/apis/credentials |
@@ -59,7 +60,7 @@ These APIs require no authentication and work out of the box:
 | disasters | USGS Earthquakes, GDACS, NASA EONET |
 | macro | World Bank, IMF WEO (FRED needs key) |
 | agri | FAOSTAT (USDA NASS needs key) |
-| conflict | UCDP, OpenSanctions (ACLED needs key) |
+| conflict | UCDP (ACLED + OpenSanctions need keys) |
 | health | WHO GHO, WHO Outbreaks, disease.sh, FDA |
 | humanitarian | UNHCR, OCHA HDX, ReliefWeb |
 | elections | ReliefWeb (Google Civic needs key) |
@@ -93,13 +94,14 @@ FRED_API_KEY=your_key_here
   └─ API keys ──────────┐
                          │ load_dotenv() in each server
                          │
-librechat.yaml           │ env: blocks pass keys explicitly
-  ├─ FRED_API_KEY ──────►│ macro_server
-  ├─ ACLED_API_KEY ─────►│ conflict_server
-  ├─ EIA_API_KEY ───────►│ commodities_server
-  ├─ COMTRADE_API_KEY ──►│ commodities_server
-  ├─ GOOGLE_API_KEY ────►│ elections_server
-  ├─ AISSTREAM_API_KEY ──► transport_server
-  ├─ CF_API_TOKEN ──────►│ infra_server
-  └─ USDA_NASS_API_KEY ──► agri_server
+librechat.yaml              │ env: blocks pass keys explicitly
+  ├─ FRED_API_KEY ─────────►│ macro_server
+  ├─ ACLED_API_KEY ────────►│ conflict_server
+  ├─ OPENSANCTIONS_API_KEY ►│ conflict_server
+  ├─ EIA_API_KEY ──────────►│ commodities_server
+  ├─ COMTRADE_API_KEY ─────►│ commodities_server
+  ├─ GOOGLE_API_KEY ───────►│ elections_server
+  ├─ AISSTREAM_API_KEY ────►│ transport_server
+  ├─ CF_API_TOKEN ─────────►│ infra_server
+  └─ USDA_NASS_API_KEY ────►│ agri_server
 ```

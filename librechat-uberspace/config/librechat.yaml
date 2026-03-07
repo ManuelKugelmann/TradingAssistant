@@ -118,10 +118,11 @@ mcpServers:
     env:
       ACLED_API_KEY: "${ACLED_API_KEY}"
       ACLED_EMAIL: "${ACLED_EMAIL}"
+      OPENSANCTIONS_API_KEY: "${OPENSANCTIONS_API_KEY}"
     serverInstructions: |
       Conflict, sanctions, and security. Sources: UCDP (Uppsala conflict data),
       ACLED (armed conflict events), OpenSanctions, SIPRI arms data.
-      ACLED needs free API key + email.
+      ACLED and OpenSanctions need free API keys.
 
   commodities:
     command: __HOME__/mcps/venv/bin/python
