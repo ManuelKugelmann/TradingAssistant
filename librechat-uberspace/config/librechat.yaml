@@ -341,6 +341,39 @@ mcpServers:
 #       titleModel: "mistralai/Mistral-7B-Instruct-v0.3"
 #       modelDisplayLabel: "HuggingFace"
 #
+#     # ── GitHub Models (free, uses GitHub PAT) ──
+#     # Key: https://github.com/settings/tokens (use PAT with no scopes)
+#     - name: "GitHub Models"
+#       apiKey: "${GITHUB_MODELS_PAT}"
+#       baseURL: "https://models.inference.ai.azure.com"
+#       models:
+#         default:
+#           - gpt-4o-mini
+#           - Meta-Llama-3.1-405B-Instruct
+#           - Mistral-large-2411
+#           - Phi-4
+#         fetch: true
+#       titleConvo: true
+#       titleModel: "gpt-4o-mini"
+#       modelDisplayLabel: "GitHub Models"
+#
+#     # ── Alibaba Cloud / Qwen (free 1M tokens/month) ──
+#     # Key: https://dashscope.console.aliyun.com/apiKey
+#     # Info: https://www.alibabacloud.com/en/campaign/qwen-ai-landing-page
+#     - name: "Qwen"
+#       apiKey: "${DASHSCOPE_API_KEY}"
+#       baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+#       models:
+#         default:
+#           - qwen-plus
+#           - qwen-turbo
+#           - qwen-max
+#           - qwen-long
+#         fetch: true
+#       titleConvo: true
+#       titleModel: "qwen-turbo"
+#       modelDisplayLabel: "Qwen"
+#
 #     # ── OpenRouter (some free models with :free suffix) ──
 #     # Key: https://openrouter.ai/keys
 #     - name: "OpenRouter"

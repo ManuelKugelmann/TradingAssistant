@@ -109,6 +109,26 @@ Reference: [cheahjs/free-llm-api-resources](https://github.com/cheahjs/free-llm-
 | **Env var** | `OPENROUTER_API_KEY=sk-or-...` |
 | **Notes** | Aggregates many providers. Free models marked with `:free`. $10 adds 1000 req/day. |
 
+### GitHub Models — Free via GitHub PAT
+
+| | |
+|---|---|
+| **Signup** | https://github.com/settings/tokens (PAT with no scopes needed) |
+| **Free limits** | Rate-limited, generous for personal use |
+| **Best models** | `gpt-4o-mini`, `Meta-Llama-3.1-405B-Instruct`, `Mistral-large-2411`, `Phi-4` |
+| **Env var** | `GITHUB_MODELS_PAT=ghp_...` |
+| **Notes** | Uses your GitHub account. Access via [GitHub Marketplace Models](https://github.com/marketplace?type=models). |
+
+### Alibaba Cloud / Qwen — Free 1M tokens/month
+
+| | |
+|---|---|
+| **Signup** | https://dashscope.console.aliyun.com/apiKey |
+| **Free limits** | 1M free tokens/month, rate-limited |
+| **Best models** | `qwen-plus`, `qwen-turbo`, `qwen-max`, `qwen-long` |
+| **Env var** | `DASHSCOPE_API_KEY=sk-...` |
+| **Notes** | Alibaba's Qwen family. International endpoint. [Landing page](https://www.alibabacloud.com/en/campaign/qwen-ai-landing-page). |
+
 ---
 
 ## Recommended Combo
@@ -140,6 +160,8 @@ XAI_API_KEY=xai-abc123...
 # SAMBANOVA_API_KEY=...
 # HF_API_KEY=hf_...
 # OPENROUTER_API_KEY=sk-or-...
+# GITHUB_MODELS_PAT=ghp_...
+# DASHSCOPE_API_KEY=sk-...
 ```
 
 Then uncomment the corresponding endpoint blocks in `librechat.yaml` and restart.
@@ -150,4 +172,6 @@ Then uncomment the corresponding endpoint blocks in `librechat.yaml` and restart
 
 Any OpenAI-compatible API can be added as a custom endpoint.
 See the [LibreChat docs](https://www.librechat.ai/docs/configuration/librechat_yaml/ai_endpoints/custom)
-and [free-llm-api-resources](https://github.com/cheahjs/free-llm-api-resources) for more options.
+and these resources for more options:
+- [cheahjs/free-llm-api-resources](https://github.com/cheahjs/free-llm-api-resources)
+- [leonardomontini.dev/free-llm-api](https://leonardomontini.dev/free-llm-api/)
