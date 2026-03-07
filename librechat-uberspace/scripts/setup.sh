@@ -111,7 +111,7 @@ elif [[ -d "$STACK/venv" ]]; then
     log "Signals stack already set up"
 else
     warn "Signals stack not found at $STACK — trading MCPs won't be available"
-    warn "Clone with: git clone https://github.com/${GH_USER:-ManuelKugelmann}/${GH_REPO_STACK:-TradingAssistant}.git $STACK"
+    warn "Clone with: git clone https://github.com/${GH_USER:-ManuelKugelmann}/${GH_REPO:-TradingAssistant}.git $STACK"
 fi
 
 # ── First install ───────────────────────────

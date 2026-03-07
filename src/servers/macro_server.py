@@ -41,9 +41,7 @@ async def fred_search(query: str, limit: int = 20) -> dict:
 async def worldbank_indicator(indicator: str = "NY.GDP.MKTP.CD",
                                country: str = "all", date: str = "2020:2024",
                                per_page: int = 100) -> dict:
-    """World Bank indicator. Examples: NY.GDP.MKTP.CD (GDP), SP.POP.TOTL (population),
-    FP.CPI.TOTL.ZG (inflation), SL.UEM.TOTL.ZS (unemployment),
-    MS.MIL.XPND.GD.ZS (military spending % GDP)."""
+    """World Bank indicator. Examples: NY.GDP.MKTP.CD, SP.POP.TOTL, FP.CPI.TOTL.ZG, SL.UEM.TOTL.ZS."""
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get(
             f"https://api.worldbank.org/v2/country/{country}/indicator/{indicator}",
@@ -66,8 +64,7 @@ async def worldbank_search(query: str) -> dict:
 async def imf_data(database: str = "IFS", frequency: str = "A",
                     ref_area: str = "US", indicator: str = "NGDP_R_XDC",
                     start: str = "2020", end: str = "2024") -> dict:
-    """IMF SDMX. database: IFS, BOP, DOT, WEO.
-    indicator: NGDP_R_XDC (real GDP), PCPI_IX (CPI), ENDA_XDC_USD_RATE (exchange)."""
+    """IMF SDMX data. database: IFS/BOP/DOT/WEO. indicator: NGDP_R_XDC, PCPI_IX, ENDA_XDC_USD_RATE."""
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get(
             f"https://dataservices.imf.org/REST/SDMX_JSON.svc/CompactData/"

@@ -42,3 +42,18 @@ if "fastmcp" not in sys.modules:
 
     mock_fastmcp.FastMCP = _FakeMCP
     sys.modules["fastmcp"] = mock_fastmcp
+
+    # Provide fastmcp.server.dependencies with a stub get_http_headers
+    # so _get_user_id() / _get_user_key() can import it (raises RuntimeError
+    # by default — same as when there's no active HTTP request).
+    mock_server = MagicMock()
+    mock_deps = MagicMock()
+
+    def _stub_get_http_headers():
+        raise RuntimeError("No active HTTP request (test stub)")
+
+    mock_deps.get_http_headers = _stub_get_http_headers
+    mock_server.dependencies = mock_deps
+    mock_fastmcp.server = mock_server
+    sys.modules["fastmcp.server"] = mock_server
+    sys.modules["fastmcp.server.dependencies"] = mock_deps

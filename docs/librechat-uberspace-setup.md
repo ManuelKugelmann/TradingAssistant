@@ -1,431 +1,481 @@
-# LibreChat Lite → Uberspace: Step-by-Step Instructions
+# Deployment Guide: TradingAssistant on Uberspace
 
-Complete deployment guide: GitHub repo → CI releases → Uberspace hosting with MCP servers and git-versioned data storage.
-
----
-
-## Overview
-
-```
-Dev (Codespace/WSL)
-  │ push code
-  ▼
-GitHub repo ──tag──▶ CI builds frontend + bundles tar ──▶ GitHub Release
-                                                              │
-                                   ┌──────────────────────────┘
-                                   ▼
-                            Uberspace (runtime)
-                            ├─ LibreChat (:3080)
-                            ├─ MCP: filesystem  → ~/TradeAssistant_Data/files/
-                            ├─ MCP: memory      → ~/TradeAssistant_Data/memory.jsonl
-                            ├─ MCP: sqlite      → ~/TradeAssistant_Data/data.db
-                            └─ cron: git sync   → GitHub (private data repo)
-                                    │
-                              ┌─────┼──────┐
-                              ▼     ▼      ▼
-                         MongoDB  Cloud   Data
-                         Atlas    LLMs    backup
-```
+Step-by-step walkthrough. Uberspace serves as the dev/staging/production host.
+One-liner install, then configure and go.
 
 ---
 
-## Phase 1: GitHub Setup
+## What You Get
 
-### 1.1 Create the bootstrap repo
-
-```bash
-# Option A: Unzip the package
-unzip librechat-uberspace.zip
-cd librechat-uberspace
-git init && git add -A && git commit -m "init"
-
-# Option B: Create repo on GitHub first, then push
-git remote add origin git@github.com:YOUR_USER/librechat-uberspace.git
-git push -u origin main
+```
+Uberspace (assist.uber.space)
+├─ LibreChat (:3080, Node.js)         — chat UI, multi-user
+│   ├─ MCP: filesystem (stdio)        → ~/TradeAssistant_Data/files/
+│   ├─ MCP: memory (stdio)            → ~/TradeAssistant_Data/memory.jsonl
+│   ├─ MCP: sqlite (stdio)            → ~/TradeAssistant_Data/data.db
+│   └─ MCP: trading (streamable-http) → localhost:8071/mcp
+│         X-User-ID / X-User-Email per request
+│         customUserVars: BROKER_API_KEY, BROKER_API_SECRET, etc.
+│
+├─ trading server (:8071, Python, 50+ tools, single process)
+│   ├─ shared: OSINT data (12 domains), profiles, snapshots
+│   ├─ per-user: notes/plans (MongoDB), risk gate
+│   └─ per-user: broker keys (headers, never stored)
+│
+├─ charts server (:8066)               — Plotly chart endpoint
+│
+└─ cron (15 min) → git push            → GitHub (TradeAssistant_Data, private)
 ```
 
-### 1.2 Configure repo secrets
-
-Go to **Settings → Secrets and variables → Actions** and add:
-
-| Secret | Value | Required |
-|---|---|---|
-| `UBERSPACE_HOST` | `yourname.uber.space` | For auto-deploy |
-| `UBERSPACE_USER` | Your SSH username | For auto-deploy |
-| `UBERSPACE_SSH_KEY` | Private SSH key (entire file content) | For auto-deploy |
-
-Auto-deploy is optional — you can also manually run `bootstrap.sh` on Uberspace.
-
-### 1.3 Create a GitHub environment
-
-Go to **Settings → Environments → New environment** → name it `uberspace`.
-This gates the deploy job and lets you add environment-specific secrets.
+**Cost:** ~5 EUR/mo (Uberspace) + free MongoDB Atlas M0 + your LLM API keys.
 
 ---
 
-## Phase 2: MongoDB Atlas
+## Prerequisites
 
-### 2.1 Create free cluster
+| What | Where | Cost |
+|------|-------|------|
+| Uberspace account | https://uberspace.de | ~5 EUR/mo (pay what you want) |
+| MongoDB Atlas M0 | https://cloud.mongodb.com | Free (512 MB) |
+| LLM API key | Any provider (see Step 4) | Per-use or free tier |
+| GitHub account | https://github.com | Free |
 
-1. Go to https://cloud.mongodb.com
-2. Create organization → project → **Build a Database**
-3. Choose **M0 (Free)** — shared tier, 512 MB
-4. Pick region closest to your Uberspace host (likely EU)
-5. Create database user: username + strong password
+---
 
-### 2.2 Network access
+## Step 1: MongoDB Atlas (5 min)
 
-1. **Network Access → Add IP Address**
-2. Choose **Allow Access from Anywhere** (`0.0.0.0/0`)
-3. Uberspace has no static IP — this is expected. Auth is enforced via connection string.
-
-### 2.3 Get connection string
-
-1. **Connect → Drivers** → copy URI
-2. Replace `<password>` with your database user password
-3. Append `/LibreChat` as the database name
+1. Go to https://cloud.mongodb.com → Create free **M0** cluster
+2. Create a database user (username + strong password)
+3. **Network Access → Add IP** → `0.0.0.0/0` (Uberspace has no static IP)
+4. **Connect → Drivers** → copy connection string
+5. You'll need two databases on the same cluster:
+   - `LibreChat` — for LibreChat's internal data
+   - `signals` — for the trading signals store
 
 ```
-mongodb+srv://user:password@cluster0.xxxxx.mongodb.net/LibreChat
+mongodb+srv://youruser:yourpass@cluster0.xxxxx.mongodb.net/LibreChat
+mongodb+srv://youruser:yourpass@cluster0.xxxxx.mongodb.net/signals
+```
+
+(Same URI, different database name at the end.)
+
+---
+
+## Step 2: Install on Uberspace (one-liner)
+
+SSH into your Uberspace host:
+
+```bash
+ssh assist@assist.uber.space
+```
+
+Run the installer:
+
+```bash
+curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
+```
+
+This single command does everything:
+- Sets Node.js 22
+- Clones the TradingAssistant repo → `~/mcps/`
+- Creates Python venv, installs `fastmcp`, `httpx`, `pymongo`
+- Downloads LibreChat release bundle (or builds from source as fallback)
+- Registers supervisord services: `librechat`, `trading`, `charts`
+- Creates `~/TradeAssistant_Data/` for MCP file storage
+- Installs `ta` shortcut → `~/bin/ta`
+
+**If it detects an existing installation, it updates instead.** Safe to re-run.
+
+### What happens when piped
+
+The script auto-detects `curl | bash` (no args, no repo yet) and runs `install`.
+After install, it prints the .env files you need to edit.
+
+### Alternative: force git-based build (no release needed)
+
+```bash
+curl -sL .../TradeAssistant.sh | bash -s install dev
 ```
 
 ---
 
-## Phase 3: First Deploy to Uberspace
+## Step 3: Configure .env files (2 min)
 
-### 3.1 SSH setup
+The installer creates two .env files that need your secrets.
 
-```bash
-# Generate SSH key if needed
-ssh-keygen -t ed25519 -C "uberspace"
-
-# Copy public key to Uberspace dashboard or:
-ssh-copy-id YOUR_USER@YOUR_HOST.uber.space
-
-# Connect
-ssh YOUR_USER@YOUR_HOST.uber.space
-```
-
-### 3.2 Set Node.js version
+### 3a. Signals stack
 
 ```bash
-uberspace tools version use node 22
-node --version   # verify: v22.x.x
+nano ~/mcps/.env
 ```
 
-### 3.3 npm global prefix (Uberspace requirement)
+Set the MongoDB URI for the signals database:
 
 ```bash
-mkdir -p ~/.npm-global
-npm config set prefix ~/.npm-global
-echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+MONGO_URI_SIGNALS=mongodb+srv://youruser:yourpass@cluster0.xxxxx.mongodb.net/signals
 ```
 
-### 3.4 Create first release
-
-Before deploying, you need at least one release. On your dev machine:
+Optional API keys (most data sources work without keys):
 
 ```bash
-git tag v0.1.0
-git push --tags
-# Wait for CI to complete → release with bundle appears
+# FRED_API_KEY=           # https://fred.stlouisfed.org/docs/api/api_key.html
+# ACLED_API_KEY=           # https://developer.acleddata.com/
+# EIA_API_KEY=             # https://www.eia.gov/opendata/register.php
 ```
 
-Or trigger manually: **Actions → Build & Release → Run workflow**
-
-### 3.5 Install on Uberspace
-
-```bash
-# Set repo (required)
-export LIBRECHAT_REPO="YOUR_USER/librechat-uberspace"
-
-# Run bootstrap
-curl -sL "https://github.com/$LIBRECHAT_REPO/releases/latest/download/bootstrap.sh" | bash
-```
-
-### 3.6 Configure .env
+### 3b. LibreChat
 
 ```bash
 nano ~/LibreChat/.env
 ```
 
-**Required settings:**
-```bash
-MONGO_URI=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/LibreChat
-# CREDS_KEY, CREDS_IV, JWT_SECRET, JWT_REFRESH_SECRET are auto-generated
-```
+Set MongoDB URI and at least one LLM key:
 
-**Add your LLM API keys** (uncomment the ones you use):
 ```bash
-OPENAI_API_KEY=sk-...
+MONGO_URI=mongodb+srv://youruser:yourpass@cluster0.xxxxx.mongodb.net/LibreChat
+
+# Pick at least one:
 ANTHROPIC_API_KEY=sk-ant-...
-# GOOGLE_KEY=...
+# OPENAI_API_KEY=sk-...
+# GROQ_API_KEY=gsk_...        # free: https://console.groq.com/keys
+# GEMINI_API_KEY=AI...         # free: https://aistudio.google.com/apikey
 ```
 
-### 3.7 Configure MCP paths
+Crypto keys (`CREDS_KEY`, `JWT_SECRET`, etc.) are auto-generated by `setup.sh`.
+
+---
+
+## Step 4: Start services
 
 ```bash
-nano ~/LibreChat/librechat.yaml
-```
-
-Replace all `/home/user/` with your actual home path (`/home/YOUR_USER/`).
-The setup script tries to do this automatically, but verify.
-
-### 3.8 Start
-
-```bash
+# Start everything
 supervisorctl start librechat
+supervisorctl start trading
 
 # Verify
-supervisorctl status librechat   # should show RUNNING
-curl -s http://127.0.0.1:3080 | head -5
+ta status
 ```
 
-### 3.9 Access
+Expected output:
 
 ```
-https://YOUR_USER.uber.space
+librechat                        RUNNING   pid 12345, uptime 0:00:05
+trading                          RUNNING   pid 12346, uptime 0:00:03
+charts                           RUNNING   pid 12347, uptime 0:00:02
+Version: v0.2.0
+Host: assist.uber.space
 ```
-
-Register your first account — this becomes the admin.
 
 ---
 
-## Phase 4: Git-Versioned Data Storage
+## Step 5: Access & register
 
-### 4.1 Create private data repo
+Open in browser:
 
-Go to https://github.com/new:
-- Name: `TradeAssistant_Data`
-- Visibility: **Private**
-- Do NOT initialize with README
-
-### 4.2 Set up SSH key on Uberspace
-
-```bash
-# Check for existing key
-ls ~/.ssh/id_ed25519.pub
-
-# If none, generate:
-ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
-
-# Add public key to GitHub → Settings → SSH Keys
-cat ~/.ssh/id_ed25519.pub
+```
+https://assist.uber.space
 ```
 
-### 4.3 Run data repo setup
+Register your first account — **this becomes the admin**.
 
-```bash
-bash ~/LibreChat/scripts/setup-data-repo.sh YOUR_USER/TradeAssistant_Data
-```
+### Configure your trading settings (per-user)
 
-This script:
-- Clones/initializes `~/TradeAssistant_Data/` as a git repo
-- Creates `files/` directory for filesystem MCP
-- Sets up `.gitignore` for large binaries
-- Adds cron job: auto-sync every 15 minutes
+In LibreChat: **Settings → Plugins → trading**
 
-### 4.4 Verify cron
+Each user can set:
 
-```bash
-crontab -l | grep TradeAssistant_Data-sync
-# Should show: */15 * * * * cd ~/TradeAssistant_Data && git add -A && ...
-```
+| Setting | What it does |
+|---------|-------------|
+| **Broker API Key** | Your broker key (Alpaca, IBKR, etc.) |
+| **Broker API Secret** | Your broker secret |
+| **Broker Name** | Platform: `alpaca`, `ibkr`, `binance` |
+| **Daily Action Limit** | Max trades/day (default: 50) |
+| **Enable Live Trading** | `yes` = real trades, blank = paper only |
 
-### 4.5 What gets versioned
-
-| Path | MCP Server | Content |
-|---|---|---|
-| `~/TradeAssistant_Data/files/` | `server-filesystem` | Documents, exports, CSV files |
-| `~/TradeAssistant_Data/memory.jsonl` | `server-memory` | Knowledge graph (entities + relations) |
-| `~/TradeAssistant_Data/data.db` | `mcp-sqlite` | SQLite database (logs, research, notes) |
-
-View history: `cd ~/TradeAssistant_Data && git log --oneline`
+These are stored per-user in LibreChat and forwarded as HTTP headers to the
+trading server. Keys are never stored server-side.
 
 ---
 
-## Phase 5: Day-to-Day Operations
+## Step 6: Git-versioned data backup (optional, 5 min)
 
-### 5.1 The `ta` command
+Create a **private** repo on GitHub: `YourUser/TradeAssistant_Data`
 
-After install, `~/bin/ta` provides shortcuts (also available as `~/bin/TradeAssistant`):
+Then on Uberspace:
 
 ```bash
-ta help       # show all commands
-ta s          # status + version
-ta l          # tail live logs
-ta r          # restart service
-ta v          # installed version
-ta u          # update to latest release
-ta pull       # quick update via git pull (dev)
-ta rb         # rollback to previous version
-ta sync       # force git-sync data now
-ta env        # edit .env
-ta yaml       # edit librechat.yaml
+bash ~/mcps/librechat-uberspace/scripts/setup-data-repo.sh
 ```
 
-### 5.2 Update workflow
+This:
+- Initializes `~/TradeAssistant_Data/` as a git repo
+- Creates SSH key if needed (prints pubkey for you to add to GitHub)
+- Sets up cron: auto-sync every 15 minutes
 
-On dev machine:
+Verify:
+
 ```bash
-# Merge upstream changes, fix conflicts, test
-git fetch upstream && git merge upstream/main
+crontab -l | grep ta
+# Should show: */15 * * * * ~/bin/ta cron 2>&1 | logger -t ta-cron
+```
+
+---
+
+## Step 7: Health check
+
+```bash
+ta check
+```
+
+Checks: stack repo, Python venv, Node.js, LibreChat install, .env files,
+supervisord services, HTTP connectivity, profiles, cron, script syntax.
+
+For full test suite:
+
+```bash
+ta check --test
+```
+
+---
+
+## Day-to-Day Operations
+
+### The `ta` command
+
+```bash
+ta help           # all commands
+ta status         # services + version + host
+ta logs           # tail LibreChat logs
+ta restart        # restart LibreChat + trading
+ta version        # installed version
+
+ta pull           # dev: git pull + restart (no release needed)
+ta update         # prod: download latest release bundle
+ta install        # re-run full installer (idempotent)
+ta rollback       # restore previous version
+
+ta sync           # force git sync of data
+ta check          # health check
+ta check -t       # health check + test suite
+
+ta env            # edit LibreChat .env
+ta yaml           # edit librechat.yaml
+ta conf           # edit deploy.conf
+```
+
+### Dev workflow (quick iteration)
+
+On your dev machine:
+
+```bash
+# Edit code
 git push
-git tag v0.2.0 && git push --tags
 ```
 
-On Uberspace (if auto-deploy not configured):
+On Uberspace:
+
 ```bash
-ta u
+ta pull
+# → git pull + pip install + restart LibreChat + restart trading
 ```
 
-### 5.3 Rollback
+### Production release workflow
+
+On your dev machine:
 
 ```bash
-ta rb
-# Restores ~/LibreChat.prev → ~/LibreChat and restarts
+git tag v0.3.0
+git push --tags
+# → CI builds bundle → GitHub Release
 ```
 
-### 5.4 Monitoring
+On Uberspace:
 
 ```bash
-# Service status
-supervisorctl status librechat
+ta update
+# → downloads release, atomic swap, restart
+```
 
-# Live logs
-ta l
+### Rollback
 
-# Memory usage
-free -h
-
-# Disk usage
-du -sh ~/LibreChat ~/TradeAssistant_Data
+```bash
+ta rollback
+# Restores ~/LibreChat.prev (kept from last update)
 ```
 
 ---
 
-## Phase 6: Adding More MCP Servers
+## Architecture: Multi-User Isolation
 
-Edit `~/LibreChat/librechat.yaml` and add new servers:
+The trading server is a **single Python process** serving all LibreChat users
+via `streamable-http` on port 8071. FastMCP 3.1+ with `stateless_http=True`.
 
-```yaml
-mcpServers:
-  # ... existing servers ...
+### What's shared (OSINT data)
 
-  # Example: Brave Search
-  brave-search:
-    command: npx
-    args:
-      - -y
-      - "@anthropic-ai/mcp-server-brave-search"
-    env:
-      BRAVE_API_KEY: "${BRAVE_API_KEY}"
+- **Profiles**: JSON files at `profiles/{region}/{kind}/{id}.json`
+- **Snapshots/events**: MongoDB timeseries (tagged with `user_id` in meta)
+- **12 data domain servers**: weather, disasters, macro, agri, conflict,
+  commodities, health, politics, humanitarian, transport, water, infra
 
-  # Example: Custom SSE server (remote)
-  my-remote-mcp:
-    type: sse
-    url: "https://my-mcp-server.example.com/sse"
-    timeout: 30000
+### What's per-user
+
+| Feature | How it works |
+|---------|-------------|
+| **Notes/plans** | MongoDB `user_notes` collection, keyed by `user_id` |
+| **Trading keys** | `customUserVars` in librechat.yaml → HTTP headers → never stored |
+| **Risk gate** | Per-user daily limit, dry-run default, live trading opt-in |
+| **Snapshot attribution** | `user_id` in snapshot/event meta |
+
+### Header flow
+
+```
+User opens LibreChat
+  → Settings > Plugins > trading → sets BROKER_API_KEY, etc.
+  → Sends MCP request
+  → LibreChat adds headers:
+      X-User-ID: abc123
+      X-User-Email: user@example.com
+      X-Broker-Key: PKTEST...
+      X-Risk-Live-Trading: yes
+  → Trading server reads headers via fastmcp.server.dependencies.get_http_headers()
+  → Notes scoped to user, risk gate checks limits, broker key available for trades
 ```
 
-Then restart: `ta r`
+---
 
-For stdio MCP servers that need Python: check if `python3` is available on Uberspace (`python3 --version`). If the MCP needs `uvx`, install via `pip install uv --break-system-packages`.
+## Adding LLM Providers
+
+Edit `~/LibreChat/librechat.yaml` and uncomment the provider blocks you want.
+All providers below have **free tiers**:
+
+| Provider | Free tier | Key URL |
+|----------|-----------|---------|
+| Groq | Fast inference, rate-limited | https://console.groq.com/keys |
+| Gemini | 15 RPM, 1M tokens/day | https://aistudio.google.com/apikey |
+| Grok (xAI) | 30 RPM | https://console.x.ai |
+| Mistral | mistral-small, codestral | https://console.mistral.ai/api-keys |
+| Cerebras | 30 RPM, fast inference | https://cloud.cerebras.ai |
+| Cohere | 20 RPM, 1K req/month | https://dashboard.cohere.com/api-keys |
+| HuggingFace | Free inference | https://huggingface.co/settings/tokens |
+| GitHub Models | Free with PAT | https://github.com/settings/tokens |
+
+After editing, add the key to `.env` and restart:
+
+```bash
+ta env    # add the key
+ta yaml   # uncomment the provider block
+ta restart
+```
 
 ---
 
 ## Troubleshooting
 
 ### LibreChat won't start
+
 ```bash
-# Check logs for errors
 supervisorctl tail librechat stderr
 # Common: wrong MONGO_URI, missing API key, port conflict
 ```
 
-### Out of memory (killed by Uberspace)
+### Trading server won't start
+
 ```bash
-# Check if process was OOM-killed
-dmesg | tail -20
-# Solution: already configured --max-old-space-size=1024 in supervisord
-# If still dying: reduce to 768
+supervisorctl tail trading stderr
+# Common: MONGO_URI_SIGNALS not set, Python import error, port 8071 conflict
 ```
 
-### MCP server-memory ignores MEMORY_FILE_PATH
-Known npx caching bug in some versions. Workaround:
+### Out of memory
+
 ```bash
-# Find where npx actually writes it
-find ~/.npm/_npx -name "memory.jsonl" 2>/dev/null
-# Symlink it
-ln -sf /path/found/memory.jsonl ~/TradeAssistant_Data/memory.jsonl
+dmesg | tail -20
+# LibreChat uses --max-old-space-size=1024
+# Trading server uses ~80 MB
+# Total: ~600-900 MB of 1.5 GB limit
 ```
+
+### MCP tools not showing in LibreChat
+
+1. Verify trading server is running: `supervisorctl status trading`
+2. Test locally: `curl -s http://localhost:8071/mcp`
+3. Check librechat.yaml has the `trading:` block with `type: streamable-http`
+4. Restart LibreChat: `ta restart`
 
 ### MongoDB connection fails
+
 ```bash
-# Test from Uberspace
-node -e "const {MongoClient}=require('mongodb'); MongoClient.connect('YOUR_URI').then(()=>console.log('ok')).catch(e=>console.error(e))"
-# Check: Atlas Network Access allows 0.0.0.0/0
+# Test from signals stack Python
+~/mcps/venv/bin/python -c "
+from pymongo import MongoClient
+c = MongoClient('your-uri-here')
+print(c.signals.list_collection_names())
+"
 ```
 
 ### Git data sync not pushing
-```bash
-# Manual test
-cd ~/TradeAssistant_Data
-git add -A && git status
-git push   # check for SSH key issues
-# Verify: ssh -T git@github.com
-```
 
-### Port conflict
 ```bash
-# Check what's using 3080
-lsof -i :3080
-# Re-register web backend
-uberspace web backend set / --http --port 3080
+cd ~/TradeAssistant_Data
+git push    # check SSH key issues
+ssh -T git@github.com   # should say "Hi youruser!"
 ```
 
 ---
 
 ## Security Checklist
 
-- [ ] `.env` has `chmod 600` (setup.sh does this, verify)
-- [ ] MongoDB Atlas user has minimal permissions (readWrite on LibreChat db only)
+- [ ] `.env` files have `chmod 600` (setup.sh does this)
+- [ ] MongoDB Atlas user has minimal permissions
 - [ ] API keys not committed to any repo
 - [ ] Data repo is **private** on GitHub
-- [ ] Registration disabled after creating your account (`ALLOW_REGISTRATION=false`)
-- [ ] SSH key on Uberspace is ed25519, no passphrase (needed for cron git push)
+- [ ] Registration disabled after creating admin: `ALLOW_REGISTRATION=false` in .env
+- [ ] Broker keys only flow through HTTP headers, never stored server-side
+- [ ] Risk gate defaults to dry-run (paper trading) — users must opt in
+
+---
+
+## File Layout on Uberspace
+
+```
+~/
+├── mcps/                          ← TradingAssistant repo clone
+│   ├── src/servers/               ← 12 domain servers + combined_server.py
+│   ├── src/store/                 ← signals store (server.py)
+│   ├── profiles/                  ← profile JSON files
+│   ├── venv/                      ← Python virtual environment
+│   ├── .env                       ← signals stack config
+│   └── deploy.conf                ← central config
+│
+├── LibreChat/                     ← LibreChat installation
+│   ├── .env                       ← LibreChat config
+│   ├── librechat.yaml             ← MCP server definitions
+│   └── api/                       ← LibreChat backend
+│
+├── TradeAssistant_Data/           ← git-versioned MCP data
+│   ├── files/                     ← filesystem MCP storage
+│   ├── memory.jsonl               ← knowledge graph
+│   └── data.db                    ← SQLite database
+│
+├── bin/
+│   ├── ta                         ← ops CLI (primary)
+│   └── TradeAssistant             ← symlink to ta
+│
+├── etc/services.d/
+│   ├── librechat.ini              ← supervisord: LibreChat
+│   ├── trading.ini                ← supervisord: trading MCP server
+│   └── charts.ini                 ← supervisord: chart endpoint
+│
+└── logs/                          ← service logs
+```
 
 ---
 
 ## Cost Summary
 
 | Service | Cost |
-|---|---|
-| Uberspace | ~5€/mo (pay what you want, min 1€) |
+|---------|------|
+| Uberspace | ~5 EUR/mo (pay what you want, min 1 EUR) |
 | MongoDB Atlas M0 | Free (512 MB) |
 | GitHub | Free |
-| Cloud LLM APIs | Per-use |
-| **Total infrastructure** | **~5€/mo** |
-
----
-
-## File Manifest
-
-```
-librechat-uberspace/
-├── .github/workflows/
-│   └── release.yml              CI: build + bundle + optional auto-deploy
-├── .devcontainer/
-│   └── devcontainer.json        Codespaces dev environment
-├── config/
-│   ├── librechat.yaml           MCP servers + LibreChat config
-│   └── .env.uberspace           Reference .env (not deployed)
-├── scripts/
-│   ├── bootstrap.sh             curl | bash entry point
-│   ├── setup.sh                 Install/update with atomic swap
-│   ├── setup-data-repo.sh       Git-versioned data directory
-│   └── TradeAssistant.sh         Ops shortcuts (installed as 'ta')
-├── .gitignore
-└── README.md
-```
+| LLM APIs | Per-use (many free tiers available) |
+| **Total infrastructure** | **~5 EUR/mo + LLM usage** |

@@ -17,9 +17,7 @@ _WD_HEADERS = {"User-Agent": "TradingAssistant/1.0 (trading signals research)"}
 @mcp.tool()
 async def global_elections(country: str = "", year: str = "",
                            limit: int = 20) -> list[dict]:
-    """Search global elections via Wikidata SPARQL. Works for any country.
-    country: English name (e.g. 'Germany', 'France', 'Brazil').
-    year: filter by year (e.g. '2025'). Leave empty for recent."""
+    """Global elections (Wikidata). country: English name. year: e.g. '2025'."""
     filters = []
     if country:
         filters.append(f'FILTER(CONTAINS(LCASE(?countryLabel), LCASE("{country}")))')
@@ -49,8 +47,7 @@ async def global_elections(country: str = "", year: str = "",
 
 @mcp.tool()
 async def heads_of_state(country: str = "", limit: int = 10) -> list[dict]:
-    """Current and recent heads of state/government via Wikidata.
-    country: English name (e.g. 'Germany')."""
+    """Heads of state/government (Wikidata). country: English name."""
     country_filter = ""
     if country:
         country_filter = f'FILTER(CONTAINS(LCASE(?countryLabel), LCASE("{country}")))'
@@ -84,7 +81,7 @@ async def heads_of_state(country: str = "", limit: int = 10) -> list[dict]:
 
 @mcp.tool()
 async def eu_parliament_meps(country: str = "", limit: int = 50) -> dict:
-    """List Members of European Parliament. Filter by country ISO2 code (DE, FR, IT)."""
+    """EU Parliament members. country: ISO2 (DE, FR, IT)."""
     params: dict = {"offset": 0, "limit": limit}
     if country:
         params["country-of-representation"] = country.upper()
@@ -100,7 +97,7 @@ async def eu_parliament_meps(country: str = "", limit: int = 50) -> dict:
 
 @mcp.tool()
 async def eu_parliament_votes(year: str = "2025", limit: int = 20) -> dict:
-    """Recent European Parliament plenary documents/votes."""
+    """EU Parliament plenary documents/votes."""
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.get("https://data.europarl.europa.eu/api/v2/plenary-documents",
                         params={"year": year, "limit": limit},
@@ -114,8 +111,7 @@ async def eu_parliament_votes(year: str = "2025", limit: int = 20) -> dict:
 
 @mcp.tool()
 async def us_representatives(address: str) -> dict:
-    """US elected officials for an address (Google Civic Info API).
-    Works anytime (unlike voterInfoQuery which needs active elections)."""
+    """US elected officials for an address (Google Civic Info)."""
     if not GOOGLE_KEY:
         return {"error": "GOOGLE_API_KEY not set"}
     async with httpx.AsyncClient(timeout=30) as c:
@@ -127,8 +123,7 @@ async def us_representatives(address: str) -> dict:
 
 @mcp.tool()
 async def us_voter_info(address: str) -> dict:
-    """US election info for an address (Google Civic Info API).
-    Only returns data during active election periods."""
+    """US voter/election info for an address. Only during active elections."""
     if not GOOGLE_KEY:
         return {"error": "GOOGLE_API_KEY not set"}
     async with httpx.AsyncClient(timeout=30) as c:

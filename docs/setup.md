@@ -67,75 +67,184 @@ cd TradingAssistant
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env    # edit: set MONGO_URI + optional API keys
-python src/store/server.py
+python src/servers/combined_server.py  # all tools (store + 12 domains)
 ```
 
-Run individual domain servers:
+Run individual servers standalone for testing:
 
 ```bash
+python src/store/server.py             # signals store only
 python src/servers/weather_server.py   # no key needed
 python src/servers/macro_server.py     # needs FRED_API_KEY for FRED tools
 ```
 
 ---
 
-## Uberspace Production Deploy
+## Uberspace Deploy — Two Modes
 
-### One-liner install
+| Mode | Command | LibreChat source | Update command | Use when |
+|------|---------|-----------------|----------------|----------|
+| **Release** | `ta install` | Tagged release bundle from CI | `ta u` | Production — stable, pre-tested |
+| **Dev** | `ta install dev` | CI prebuilt artifact or git clone + build | `ta pull` | Development — fast iteration, no tags needed |
+
+Both modes use the same one-liner entry point. The only difference is where LibreChat comes from.
+
+---
+
+### Dev Mode Walkthrough (prebuilt LibreChat + git)
+
+Dev mode skips tagged releases and instead uses a **CI-prebuilt LibreChat** artifact (or falls back to cloning + building from source). After initial setup, iterate with `ta pull` (git pull + restart) — no tagging required.
+
+#### Step 1: Trigger the CI prebuilt artifact
+
+On GitHub, go to **Actions > Build LibreChat > Run workflow** (or wait for the weekly Monday build). This:
+- Clones `danny-avila/LibreChat` (main branch)
+- Runs `npm ci` + `npm run frontend` in CI (not on your Uberspace)
+- Publishes `librechat-build.tar.gz` to the `librechat-build` release
+
+This saves your Uberspace ~10 min build time and ~2 GB RAM. The artifact stays current via weekly scheduled rebuilds.
+
+#### Step 2: SSH into Uberspace
+
+```bash
+ssh assist@assist.uber.space
+```
+
+#### Step 3: Run the installer in dev mode
+
+```bash
+curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash -s install dev
+```
+
+What happens:
+1. Sets Node.js 22
+2. Clones `TradingAssistant` repo to `~/mcps/`
+3. Creates Python venv, installs `fastmcp`, `httpx`, `pymongo`, `python-dotenv`
+4. Generates `~/mcps/.env` from template
+5. Registers supervisord services (`trading`, `charts`)
+6. **Skips** tagged releases (dev mode)
+7. Downloads `librechat-build.tar.gz` from the CI prebuilt release
+8. If no CI build exists: clones `danny-avila/LibreChat` and builds locally (~10 min, needs ~2 GB RAM)
+9. Runs `setup.sh` — atomic swap into `~/LibreChat/`, generates `.env` with crypto keys
+10. Registers LibreChat supervisord service, sets up web backend on port 3080
+11. Installs `ta` CLI to `~/bin/ta`
+
+#### Step 4: Configure environment
+
+```bash
+# Signals stack — one shared MongoDB Atlas cluster, database: signals
+ta conf
+# Set: MONGO_URI=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/signals
+
+# LibreChat — same cluster, database: LibreChat
+ta env
+# Set: MONGO_URI=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/LibreChat
+# Set at least one LLM key:
+#   OPENROUTER_API_KEY=sk-or-...
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   OPENAI_API_KEY=sk-...
+```
+
+Crypto secrets (`CREDS_KEY`, `CREDS_IV`, `JWT_SECRET`, `JWT_REFRESH_SECRET`) are auto-generated.
+
+#### Step 5: Verify MCP paths
+
+```bash
+ta yaml
+# All __HOME__ placeholders should be replaced with /home/assist
+# Verify paths like /home/assist/mcps/src/store/server.py exist
+```
+
+#### Step 6: Start
+
+```bash
+supervisorctl start librechat
+ta s    # should show RUNNING + version like "dev-a1b2c3d"
+```
+
+#### Step 7: Access
+
+```
+https://assist.uber.space
+```
+
+Register first account (becomes admin). Then lock registration:
+```bash
+ta env   # add: ALLOW_REGISTRATION=false
+ta r     # restart
+```
+
+#### Step 8: Iterate with git pull
+
+After pushing changes to `main` on your dev machine:
+```bash
+ta pull    # git pull ~/mcps + restart LibreChat
+```
+
+This pulls the latest signals stack code (servers, profiles, config) and restarts. No tagging, no CI, no release — just push and pull.
+
+To update LibreChat itself (new upstream version), re-run:
+```bash
+ta install dev    # re-downloads CI build or rebuilds from source
+```
+
+#### Step 9: Git-versioned data (optional)
+
+```bash
+# Create PRIVATE repo on GitHub: ManuelKugelmann/TradeAssistant_Data
+bash ~/mcps/librechat-uberspace/scripts/setup-data-repo.sh
+```
+
+Auto-syncs every 15 min via cron. Stores filesystem files, memory graph, and SQLite DB.
+
+---
+
+### Release Mode Walkthrough (production)
+
+For stable deployments using tagged releases.
+
+#### One-liner install
 
 ```bash
 ssh assist@assist.uber.space
 curl -sL https://raw.githubusercontent.com/ManuelKugelmann/TradingAssistant/main/librechat-uberspace/scripts/TradeAssistant.sh | bash
 ```
 
-This:
-- Clones the repo to `~/mcps/`
-- Creates Python venv with dependencies
-- Installs LibreChat (from release bundle or repo)
-- Registers all supervisord services
-- Installs the `ta` CLI tool
-
-Re-run safe — skips what's already done, preserves config.
-
-### Configure
-
+Requires a tagged release to exist first. On your dev machine:
 ```bash
-# Signals stack — set MONGO_URI + optional API keys
-nano ~/mcps/.env
-
-# LibreChat — set MONGO_URI + at least one LLM key
-nano ~/LibreChat/.env
+git tag v0.1.0 && git push --tags
+# Wait for CI to build librechat-bundle.tar.gz and attach to release
 ```
 
-LibreChat `.env` needs:
+#### Configure
 
 ```bash
-MONGO_URI=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/LibreChat
-# Pick one (or use OpenRouter for multi-model access):
-OPENROUTER_API_KEY=sk-or-...
-# ANTHROPIC_API_KEY=sk-ant-...
-# OPENAI_API_KEY=sk-...
+ta conf   # signals stack: set MONGO_URI
+ta env    # LibreChat: set MONGO_URI + LLM key
 ```
 
-Internal secrets (`CREDS_KEY`, `CREDS_IV`, `JWT_SECRET`, `JWT_REFRESH_SECRET`) are auto-generated by `setup.sh`.
-
-### Start
+#### Start
 
 ```bash
 supervisorctl start librechat
-supervisorctl status librechat    # should show RUNNING
+ta s
 ```
 
-Access at `https://assist.uber.space` — first registered user becomes admin.
-
-### Git-versioned data (optional)
+#### Update
 
 ```bash
-# Create PRIVATE repo: ManuelKugelmann/TradeAssistant_Data
-bash ~/mcps/librechat-uberspace/scripts/setup-data-repo.sh
+# Dev machine: tag new release
+git tag v0.2.0 && git push --tags
+
+# Uberspace: download and install
+ta u
 ```
 
-Auto-syncs every 15 min via cron. Stores filesystem files, memory graph, and SQLite DB.
+#### Rollback
+
+```bash
+ta rb    # restores ~/LibreChat.prev from last update
+```
 
 ---
 
@@ -148,7 +257,7 @@ All deployment settings live in `deploy.conf` (sourced by all scripts):
 | `UBER_USER` | `assist` | Uberspace username |
 | `UBER_HOST` | `assist.uber.space` | Uberspace hostname |
 | `GH_USER` | `ManuelKugelmann` | GitHub username |
-| `GH_REPO_STACK` | `TradingAssistant` | Signals stack repo |
+| `GH_REPO` | `TradingAssistant` | Signals stack repo |
 | `GH_REPO_DATA` | `TradeAssistant_Data` | Data repo (private) |
 | `STACK_DIR` | `$HOME/mcps` | Signals stack path |
 | `APP_DIR` | `$HOME/LibreChat` | LibreChat path |
@@ -239,12 +348,12 @@ uberspace web backend set / --http --port 3080
 
 | Resource | Limit | Usage |
 |----------|-------|-------|
-| RAM | 1.5 GB hard kill | ~500-800 MB (LibreChat) + ~50 MB per Python MCP |
+| RAM | 1.5 GB hard kill | ~500-800 MB (LibreChat) + ~80 MB (1 Python MCP) |
 | Storage | 10 GB (expandable) | ~2 GB installed |
 | Node.js | 18, 20, 22 | Requires >=20 |
 | Docker | Not available | Not needed |
 
-Running all 12 domain servers simultaneously may approach the RAM limit. Start with just the ones you need — `weather`, `macro`, `disasters` are good defaults. The signals store is lightweight and should always run.
+Signals store + all 12 domain servers run in a single combined process (`trading`, ~80 MB) via FastMCP `mount()`, well within RAM limits.
 
 ## Cost
 

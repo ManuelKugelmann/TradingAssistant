@@ -442,3 +442,127 @@ class TestValidKinds:
     def test_blocked_agg_stages(self, store):
         for stage in ("$out", "$merge", "$unionWith"):
             assert stage in store._BLOCKED_STAGES
+
+
+# ── User context helpers ────────────────────────
+
+
+class TestGetUserId:
+    def test_returns_empty_when_no_headers(self, store):
+        """Without streamable-http, _get_user_id returns empty or env fallback."""
+        uid = store._get_user_id()
+        # Should return empty string (no HTTP context, no env var set)
+        assert isinstance(uid, str)
+
+    def test_env_fallback(self, store, monkeypatch):
+        monkeypatch.setenv("LIBRECHAT_USER_ID", "user-from-env")
+        uid = store._get_user_id()
+        assert uid == "user-from-env"
+
+    def test_header_takes_priority(self, store, monkeypatch):
+        """If get_http_headers returns a user ID, it takes priority over env."""
+        monkeypatch.setenv("LIBRECHAT_USER_ID", "env-user")
+        fake_headers = {"x-user-id": "header-user"}
+        deps = sys.modules["fastmcp.server.dependencies"]
+        monkeypatch.setattr(deps, "get_http_headers", lambda: fake_headers)
+        uid = store._get_user_id()
+        assert uid == "header-user"
+
+
+class TestGetUserKey:
+    def test_returns_empty_without_headers(self, store):
+        key = store._get_user_key("x-broker-key")
+        assert key == ""
+
+    def test_reads_header(self, store, monkeypatch):
+        fake_headers = {"x-broker-key": "my-secret-key"}
+        deps = sys.modules["fastmcp.server.dependencies"]
+        monkeypatch.setattr(deps, "get_http_headers", lambda: fake_headers)
+        key = store._get_user_key("x-broker-key")
+        assert key == "my-secret-key"
+
+
+# ── Risk gate ───────────────────────────────────
+
+
+class TestRiskGate:
+    def test_blocks_without_user(self, store, monkeypatch):
+        monkeypatch.delenv("LIBRECHAT_USER_ID", raising=False)
+        result = store._risk_check("buy", {"symbol": "AAPL"})
+        assert result is not None
+        assert "user not identified" in result["error"]
+
+    def test_dry_run_blocks_by_default(self, store, monkeypatch):
+        monkeypatch.setenv("LIBRECHAT_USER_ID", "test-user")
+        result = store._risk_check("buy", {"symbol": "AAPL"})
+        assert result is not None
+        assert result["blocked"] == "dry_run"
+
+    def test_passes_when_confirmed(self, store, monkeypatch):
+        monkeypatch.setenv("LIBRECHAT_USER_ID", "test-user")
+        store._user_action_counts.clear()
+        result = store._risk_check("buy", {"symbol": "AAPL"}, dry_run=False)
+        assert result is None
+
+    def test_daily_limit_enforced(self, store, monkeypatch):
+        monkeypatch.setenv("LIBRECHAT_USER_ID", "limit-user")
+        store._user_action_counts["limit-user"] = store._DAILY_ACTION_LIMIT_DEFAULT
+        result = store._risk_check("buy", {"symbol": "AAPL"}, dry_run=False)
+        assert result is not None
+        assert "daily action limit" in result["error"]
+        store._user_action_counts.clear()
+
+    def test_live_trading_header_overrides_dry_run(self, store, monkeypatch):
+        """User enables live trading in UI → dry_run=True is overridden."""
+        monkeypatch.setenv("LIBRECHAT_USER_ID", "live-user")
+        store._user_action_counts.clear()
+        fake_headers = {"x-user-id": "live-user", "x-risk-live-trading": "yes"}
+        deps = sys.modules["fastmcp.server.dependencies"]
+        monkeypatch.setattr(deps, "get_http_headers", lambda: fake_headers)
+        result = store._risk_check("buy", {"symbol": "AAPL"}, dry_run=True)
+        assert result is None  # live_trading overrides dry_run
+        store._user_action_counts.clear()
+
+    def test_custom_daily_limit_from_header(self, store, monkeypatch):
+        """User sets a custom daily limit via UI."""
+        monkeypatch.setenv("LIBRECHAT_USER_ID", "custom-limit")
+        fake_headers = {"x-user-id": "custom-limit", "x-risk-daily-limit": "3"}
+        deps = sys.modules["fastmcp.server.dependencies"]
+        monkeypatch.setattr(deps, "get_http_headers", lambda: fake_headers)
+        store._user_action_counts["custom-limit"] = 3
+        result = store._risk_check("buy", {"symbol": "AAPL"}, dry_run=False)
+        assert result is not None
+        assert "daily action limit (3)" in result["error"]
+        store._user_action_counts.clear()
+
+    def test_risk_status_tool(self, store, monkeypatch):
+        monkeypatch.setenv("LIBRECHAT_USER_ID", "status-user")
+        store._user_action_counts["status-user"] = 5
+        result = store.risk_status()
+        assert result["actions_today"] == 5
+        assert result["daily_limit"] == store._DAILY_ACTION_LIMIT_DEFAULT
+        assert result["remaining"] == store._DAILY_ACTION_LIMIT_DEFAULT - 5
+        assert result["live_trading"] is False
+        assert result["broker_key_set"] is False
+        store._user_action_counts.clear()
+
+    def test_risk_status_with_broker(self, store, monkeypatch):
+        """Risk status shows broker info from headers."""
+        fake_headers = {
+            "x-user-id": "broker-user",
+            "x-broker-name": "alpaca",
+            "x-broker-key": "PKTEST123",
+            "x-risk-live-trading": "yes",
+            "x-risk-daily-limit": "10",
+        }
+        deps = sys.modules["fastmcp.server.dependencies"]
+        monkeypatch.setattr(deps, "get_http_headers", lambda: fake_headers)
+        store._user_action_counts["broker-user"] = 2
+        result = store.risk_status()
+        assert result["broker"] == "alpaca"
+        assert result["broker_key_set"] is True
+        assert result["live_trading"] is True
+        assert result["daily_limit"] == 10
+        assert result["actions_today"] == 2
+        assert result["remaining"] == 8
+        store._user_action_counts.clear()

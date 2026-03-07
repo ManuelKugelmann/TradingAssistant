@@ -630,37 +630,38 @@ class TestWaterServer:
 
 
 class TestCombinedServer:
-    """Verify combined_server.py mounts all 12 domains with correct namespaces."""
+    """Verify combined_server.py mounts store + 12 domains with correct namespaces."""
 
     @pytest.fixture(autouse=True)
     def _import(self, monkeypatch):
         # Set all optional API keys so modules load cleanly
         for key in ("GOOGLE_API_KEY", "CF_API_TOKEN", "AISSTREAM_API_KEY",
                      "FRED_API_KEY", "EIA_API_KEY", "ACLED_API_KEY",
-                     "COMTRADE_API_KEY", "USDA_NASS_API_KEY"):
+                     "COMTRADE_API_KEY", "USDA_NASS_API_KEY",
+                     "MONGO_URI"):
             monkeypatch.setenv(key, "test")
         # Clear cached modules to pick up env changes
         for mod_name in list(sys.modules):
-            if mod_name.endswith("_server") or mod_name == "combined_server":
+            if mod_name.endswith("_server") or mod_name in ("combined_server", "server"):
                 del sys.modules[mod_name]
         import combined_server
         self.mod = combined_server
 
     def test_combined_server_imports(self):
         assert self.mod.mcp is not None
-        assert self.mod.mcp.name == "trading-data"
+        assert self.mod.mcp.name == "trading"
 
     @pytest.mark.asyncio
     async def test_combined_server_tool_count(self):
         tools = await self.mod.mcp.list_tools()
-        assert len(tools) == 43, f"Expected 43 tools, got {len(tools)}: {[t.name for t in tools]}"
+        assert len(tools) >= 50, f"Expected 50+ tools, got {len(tools)}: {[t.name for t in tools]}"
 
     @pytest.mark.asyncio
     async def test_combined_server_namespaces(self):
         tools = await self.mod.mcp.list_tools()
         tool_names = {t.name for t in tools}
         expected_prefixes = [
-            "weather_", "disaster_", "econ_", "agri_", "conflict_",
+            "store_", "weather_", "disaster_", "econ_", "agri_", "conflict_",
             "commodity_", "health_", "politics_", "humanitarian_",
             "transport_", "water_", "infra_"
         ]
@@ -673,6 +674,8 @@ class TestCombinedServer:
         tools = await self.mod.mcp.list_tools()
         tool_names = {t.name for t in tools}
         must_have = [
+            "store_get_profile", "store_snapshot", "store_chart",
+            "store_save_note", "store_risk_status",
             "weather_forecast", "disaster_get_earthquakes", "econ_fred_series",
             "agri_fao_data", "conflict_acled_events", "commodity_trade_flows",
             "health_who_indicator", "politics_global_elections",

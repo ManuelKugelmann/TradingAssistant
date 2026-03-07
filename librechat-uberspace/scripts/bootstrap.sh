@@ -8,7 +8,7 @@ for conf in "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/deploy.conf" \
     [[ -f "$conf" ]] && { source "$conf"; break; }
 done
 
-REPO="${LIBRECHAT_REPO:-${GH_USER:-ManuelKugelmann}/${GH_REPO_STACK:-TradingAssistant}}"
+REPO="${LIBRECHAT_REPO:-${GH_USER:-ManuelKugelmann}/${GH_REPO:-TradingAssistant}}"
 API="https://api.github.com/repos/${REPO}/releases/latest"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 log()  { echo -e "${GREEN}✓${NC} $1"; }

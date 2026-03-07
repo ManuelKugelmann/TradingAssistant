@@ -81,7 +81,7 @@ Global roadmap and task list. Updated 2026-03-03.
 ## P4 — Deployment & Ops
 
 - [ ] **Test Uberspace deployment end-to-end**
-      Run `scripts/bootstrap-uberspace.sh` on a live Uberspace host.
+      Run `ta install` on a live Uberspace host.
       Verify supervisord services start, logs rotate, .env is picked up.
 - [ ] **Test LibreChat deployment end-to-end**
       Run the `librechat-uberspace/` deployment package. Verify LibreChat connects

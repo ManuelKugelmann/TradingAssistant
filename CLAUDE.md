@@ -2,7 +2,7 @@
 
 ## Project
 
-**TradingAssistant** — An MCP-based trading signals platform deployed via LibreChat on Uberspace. 5 MCP servers: 3 utility (filesystem, memory, sqlite) + 1 signals store + 1 combined trading-data server (12 domains, 75+ sources, 43 tools).
+**TradingAssistant** — An MCP-based trading signals platform deployed via LibreChat on Uberspace. 4 MCP servers: 3 utility (filesystem, memory, sqlite via stdio) + 1 combined trading server (signals store + 12 data domains, 50+ tools, 75+ data sources) via streamable-http. Single process, multi-user: OSINT data is shared, notes/plans are per-user, trading keys are per-user via `customUserVars`. A risk gate guards all external trading actions.
 
 ## Naming Conventions
 
@@ -95,7 +95,6 @@ TradingAssistant/
 │   └── test_ta_sync.bats             ← sync commit/push logic
 │
 ├── scripts/
-│   ├── bootstrap-uberspace.sh         ← legacy bootstrap
 │   └── nightly-git-commit.sh          ← nightly profile commit
 │
 ├── docs/
@@ -123,11 +122,17 @@ GitHub (TradingAssistant) ──tag──▶ CI builds bundle ──▶ GitHub R
                                   ▼
                            Uberspace (assist.uber.space)
                            ├─ LibreChat (:3080, Node.js)
-                           │   ├─ MCP: filesystem  → ~/TradeAssistant_Data/files/
-                           │   ├─ MCP: memory      → ~/TradeAssistant_Data/memory.jsonl
-                           │   ├─ MCP: sqlite      → ~/TradeAssistant_Data/data.db
-                           │   ├─ MCP: signals-store (Python, profiles + snapshots)
-                           │   └─ MCP: trading-data (Python, 12 domains combined)
+                           │   ├─ MCP: filesystem  → ~/TradeAssistant_Data/files/ (stdio)
+                           │   ├─ MCP: memory      → ~/TradeAssistant_Data/memory.jsonl (stdio)
+                           │   ├─ MCP: sqlite      → ~/TradeAssistant_Data/data.db (stdio)
+                           │   └─ MCP: trading ──streamable-http──▶ :8071/mcp
+                           │         X-User-ID / X-User-Email injected per request
+                           │         customUserVars: BROKER_API_KEY, BROKER_API_SECRET
+                           │
+                           ├─ trading server (:8071, Python, store + 12 domains, 50+ tools)
+                           │   ├─ shared: OSINT data, profiles, snapshots, events
+                           │   ├─ per-user: notes/plans (MongoDB user_notes), risk gate
+                           │   └─ per-user: broker keys (headers, never stored)
                            │
                            └─ cron (every 15 min) ──push──▶ GitHub (TradeAssistant_Data, private)
                                   │
@@ -139,35 +144,45 @@ GitHub (TradingAssistant) ──tag──▶ CI builds bundle ──▶ GitHub R
 
 ## Key Technical Details
 
-### Signals Store (`src/store/server.py`)
-- **Framework**: FastMCP
-- **Profiles**: JSON files at `profiles/{region}/{kind}/{id}.json`, git-tracked
-- **MongoDB**: Per-kind timeseries collections (`snap_{kind}`, `arch_{kind}`, `events`)
+### Combined Trading Server (`src/servers/combined_server.py`)
+- **Architecture**: Signals store + 12 data domains combined via FastMCP `mount(namespace=)`
+- **Transport**: streamable-http on `:8071/mcp` (`stateless_http=True`), falls back to stdio for dev/testing
+- **Entry point**: `combined_server.py` mounts `store/server.py` as `store` namespace + 12 domain servers
+- **Tool namespacing**: `store_get_profile`, `weather_forecast`, `econ_fred_series`, etc.
+- **Multi-user**: LibreChat injects `X-User-ID` / `X-User-Email` headers per request; `_get_user_id()` reads them via `fastmcp.server.dependencies.get_http_headers()`
+- **Per-user isolation**: notes/plans scoped by `user_id` in MongoDB; broker keys passed as headers (never stored); snapshots/events tagged with `user_id` in meta
+- **Risk gate**: `_risk_check()` enforces user identification, dry_run default, daily action limits before any external trading API call
+- **Per-user keys**: `customUserVars` in `librechat.yaml` lets each user set `BROKER_API_KEY` / `BROKER_API_SECRET`; forwarded as HTTP headers, read via `_get_user_key()`
+- Individual servers (`store/server.py`, `weather_server.py`, etc.) still work standalone for testing
+
+#### Signals Store (store_* namespace)
+- **Profiles** (shared): JSON files at `profiles/{region}/{kind}/{id}.json`, git-tracked
+- **MongoDB** (shared): Per-kind timeseries collections (`snap_{kind}`, `arch_{kind}`, `events`); snapshots/events include `user_id` in meta
+- **Notes** (per-user): `user_notes` collection keyed by `user_id` — plans, watchlists, journal entries
+- **Risk gate** (per-user): `risk_status()` tool, `_risk_check()` guard for trading actions, configurable daily limit
 - **Geo support**: Optional GeoJSON `location` field, 2dsphere indexes, `nearby()` tool
-- **Profile tools**: `get_profile`, `put_profile`, `list_profiles`, `find_profile`, `search_profiles`, `list_regions`, `rebuild_index`, `lint_profiles`
-- **Snapshot tools**: `snapshot`, `history`, `trend`, `nearby`, `event`, `recent_events`, `archive_snapshot`, `archive_history`, `compact`, `aggregate`, `chart`
+- **Profile tools**: `store_get_profile`, `store_put_profile`, `store_list_profiles`, `store_find_profile`, `store_search_profiles`, `store_list_regions`, `store_rebuild_index`, `store_lint_profiles`
+- **Snapshot tools**: `store_snapshot`, `store_history`, `store_trend`, `store_nearby`, `store_event`, `store_recent_events`, `store_archive_snapshot`, `store_archive_history`, `store_compact`, `store_aggregate`, `store_chart`
+- **Notes tools**: `store_save_note`, `store_get_notes`, `store_update_note`, `store_delete_note`
+- **Risk tools**: `store_risk_status`
 - **Shared API**: Both profile and snapshot tools use `kind` + `id` + optional `region`; snapshot tools add time fields
 - **Profile kinds**: countries, stocks, etfs, crypto, indices, sources, commodities, crops, materials, products, companies
 - **Regions**: north_america, latin_america, europe, mena, sub_saharan_africa, south_asia, east_asia, southeast_asia, central_asia, oceania, arctic, antarctic, global
 
-### Domain Servers (`src/servers/*.py`)
-- 12 individual servers combined into one via `combined_server.py` using FastMCP `mount(namespace=)`
+#### Data Domains (12 namespaces)
 - All use FastMCP framework + `httpx` for HTTP calls
-- Tool names are namespaced: `weather_forecast`, `econ_fred_series`, `disaster_get_earthquakes`, etc.
 - Most APIs are free/no-key; some need optional API keys (FRED, ACLED, EIA, etc.)
-- Individual servers still work standalone for testing
-- Combined server spawned as single stdio child process by LibreChat
 
 ### deploy.conf (Central Config)
 All scripts source this file. Key variables:
 - `UBER_USER=assist`, `UBER_HOST=assist.uber.space`
-- `GH_USER=ManuelKugelmann`, `GH_REPO_STACK=TradingAssistant`, `GH_REPO_DATA=TradeAssistant_Data`
+- `GH_USER=ManuelKugelmann`, `GH_REPO=TradingAssistant`, `GH_REPO_DATA=TradeAssistant_Data`
 - `STACK_DIR=$HOME/mcps`, `APP_DIR=$HOME/LibreChat`, `DATA_DIR=$HOME/TradeAssistant_Data`
 - `LC_PORT=3080`, `NODE_VERSION=22`
 
 ### Python Dependencies
 ```
-fastmcp>=2.0
+fastmcp>=3.1
 httpx>=0.27
 pymongo>=4.7
 python-dotenv>=1.0
@@ -285,11 +300,31 @@ Each entry: `{id, kind, name, region, tags?, sector?}`.
 | `aggregate(kind, pipeline, archive?)` | Raw aggregation pipeline |
 | `chart(kind, entity, type, fields, ...)` | Generate Plotly chart |
 
+### Notes tools (per-user, same API + user scoping)
+
+| Tool | Purpose |
+|------|---------|
+| `save_note(title, content, tags?, kind?)` | Save note/plan/watchlist/journal (scoped to user) |
+| `get_notes(kind?, tag?, limit?)` | List your notes, filter by kind or tag |
+| `update_note(note_id, content?, title?, tags?)` | Update a note (owner only) |
+| `delete_note(note_id)` | Delete a note (owner only) |
+
+### Risk gate
+
+| Tool | Purpose |
+|------|---------|
+| `risk_status()` | Show actions used today, daily limit, remaining |
+
+Internal: `_risk_check(action, params, dry_run=True)` — called before any external trading API call. Blocks if user not identified, dry_run=True (default), or daily limit exceeded.
+
 ## Environment Variables
 
 ### Signals Stack (`.env`)
 - `MONGO_URI` — MongoDB Atlas connection string (database: `signals`)
 - `PROFILES_DIR` — path to profiles directory (default: `./profiles`)
+- `MCP_TRANSPORT` — `streamable-http` (production) or `stdio` (dev/testing, default)
+- `MCP_PORT` — port for streamable-http (default: `8071`)
+- `RISK_DAILY_LIMIT` — max trading actions per user per day (default: `50`)
 - Optional API keys: `FRED_API_KEY`, `ACLED_API_KEY`, `EIA_API_KEY`, `COMTRADE_API_KEY`, `GOOGLE_API_KEY`, `AISSTREAM_API_KEY`, `CF_API_TOKEN`, `USDA_NASS_API_KEY`
 - Full reference: `docs/api-keys.md`
 
@@ -304,7 +339,7 @@ Each entry: `{id, kind, name, region, tags?, sector?}`.
 **Completed**: Repo init, cleanup, LibreChat full integration, CI release workflow, `ta` ops tool, data repo automation, code review fixes (security + correctness), chart tool + HTTP endpoint, profile INDEX.json, API keys doc, setup doc, test suite (87 tests: 45 bats + 42 pytest) + CI
 
 **Next priorities (P0)**:
-- Validate combined trading-data server runs without errors
+- Validate combined trading server runs without errors (store + 12 domains)
 - Test signals store against live Atlas M0
 - Populate profiles at scale (~200 countries, ~500 stocks, ~100 ETFs, ~75 sources)
 
@@ -395,3 +430,4 @@ Runs on every push to `main` and on PRs:
 - Cron sync logger tag: `ta-data-sync`
 - `__HOME__` placeholder in `librechat.yaml` is replaced by `setup.sh` with actual `$HOME`
 - After editing any `.sh` file, always run `bash -n <file>` to verify syntax — especially for `TradeAssistant.sh` which must work when piped via `curl | bash` (avoid complex nested quoting in that context)
+- Use approximate tool counts (e.g. "50+ tools") instead of exact numbers — exact counts go stale as tools are added/removed

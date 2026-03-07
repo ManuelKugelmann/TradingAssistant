@@ -26,10 +26,7 @@ mcpServers:
       - -y
       - "@modelcontextprotocol/server-filesystem"
       - __HOME__/TradeAssistant_Data/files/
-    serverInstructions: |
-      Filesystem for persistent file storage.
-      Use for documents, research exports, CSV files, reports.
-      All files are git-versioned and synced to GitHub.
+    serverInstructions: "Persistent file storage (git-synced). For documents, exports, reports."
 
   memory:
     command: npx
@@ -38,10 +35,7 @@ mcpServers:
       - "@modelcontextprotocol/server-memory"
     env:
       MEMORY_FILE_PATH: __HOME__/TradeAssistant_Data/memory.jsonl
-    serverInstructions: |
-      Persistent memory as a knowledge graph.
-      Store entities (people, projects, preferences) and their relations.
-      Use for context that should persist across conversations.
+    serverInstructions: "Knowledge graph memory. Store entities, relations, preferences across conversations."
 
   sqlite:
     command: npx
@@ -49,64 +43,48 @@ mcpServers:
       - -y
       - mcp-sqlite
       - __HOME__/TradeAssistant_Data/data.db
+    serverInstructions: "SQLite database for structured data. Full SQL supported."
+
+  # ── Trading Server (signals store + 12 data domains, one process) ──
+  # Runs as streamable-http so LibreChat injects per-user headers.
+  # Env vars + API keys are set in the supervisord service, not here.
+
+  trading:
+    type: streamable-http
+    url: http://localhost:8071/mcp
+    headers:
+      X-User-ID: "{{LIBRECHAT_USER_ID}}"
+      X-User-Email: "{{LIBRECHAT_USER_EMAIL}}"
+      X-Broker-Key: "{{BROKER_API_KEY}}"
+      X-Broker-Secret: "{{BROKER_API_SECRET}}"
+      X-Broker-Name: "{{BROKER_NAME}}"
+      X-Risk-Daily-Limit: "{{RISK_DAILY_LIMIT}}"
+      X-Risk-Live-Trading: "{{RISK_LIVE_TRADING}}"
+    customUserVars:
+      BROKER_API_KEY:
+        title: "Broker API Key"
+        description: "Your trading broker API key (e.g. Alpaca, IBKR). Leave blank for OSINT-only mode."
+      BROKER_API_SECRET:
+        title: "Broker API Secret"
+        description: "Your trading broker API secret. Never shared with other users."
+      BROKER_NAME:
+        title: "Broker Name"
+        description: "Your broker platform: alpaca, ibkr, binance, etc. Used to select the right API adapter."
+      RISK_DAILY_LIMIT:
+        title: "Daily Action Limit"
+        description: "Max trading actions per day (default: 50). Set lower for safety."
+      RISK_LIVE_TRADING:
+        title: "Enable Live Trading"
+        description: "Set to 'yes' to allow real trades. Leave blank for dry-run only (paper trading)."
     serverInstructions: |
-      SQLite database for structured data.
-      Use for logs, research results, structured notes, transaction records.
-      Supports full SQL: CREATE TABLE, INSERT, SELECT, UPDATE, DELETE.
-
-  # ── Signals Store ──────────────────────────
-
-  signals-store:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/store/server.py
-    env:
-      PROFILES_DIR: __HOME__/mcps/profiles
-      MONGO_URI_SIGNALS: "${MONGO_URI_SIGNALS}"
-    serverInstructions: |
-      Hybrid profile/snapshot store for trading signals.
-      Profiles: get_profile, put_profile, list_profiles, search_profiles
-        — for countries (DEU, USA), stocks (AAPL), ETFs, crypto, indices, sources.
-      Snapshots: snapshot, event, history, recent_events, trend, aggregate
-        — timeseries data in MongoDB Atlas (1yr TTL). Archive for long-term (no TTL).
-      Charts: chart(entity, type, fields, ...) returns complete Plotly HTML.
-        Output the returned HTML directly as an artifact for interactive visualization.
-      Use profiles for identity/exposure data. Use snapshots for measurements over time.
-
-  # ── Domain Servers (12 domains, 75+ sources, combined into one process) ──
-
-  trading-data:
-    command: __HOME__/mcps/venv/bin/python
-    args:
-      - __HOME__/mcps/src/servers/combined_server.py
-    env:
-      FRED_API_KEY: "${FRED_API_KEY}"
-      USDA_NASS_API_KEY: "${USDA_NASS_API_KEY}"
-      ACLED_API_KEY: "${ACLED_API_KEY}"
-      ACLED_EMAIL: "${ACLED_EMAIL}"
-      EIA_API_KEY: "${EIA_API_KEY}"
-      COMTRADE_API_KEY: "${COMTRADE_API_KEY}"
-      GOOGLE_API_KEY: "${GOOGLE_API_KEY}"
-      AISSTREAM_API_KEY: "${AISSTREAM_API_KEY}"
-      CF_API_TOKEN: "${CF_API_TOKEN}"
-    serverInstructions: |
-      Combined trading data server — 43 tools across 12 namespaced domains.
-      All tools are prefixed by domain: weather_*, disaster_*, econ_*, etc.
-      Weather: weather_forecast, weather_historical_weather, weather_flood_forecast, weather_space_weather
-      Disaster: disaster_get_earthquakes, disaster_get_disasters, disaster_get_natural_events
-      Econ: econ_fred_series, econ_fred_search, econ_worldbank_indicator, econ_worldbank_search, econ_imf_data
-      Agri: agri_fao_datasets, agri_fao_data, agri_usda_crop, agri_usda_crop_progress
-      Conflict: conflict_ucdp_conflicts, conflict_acled_events, conflict_search_sanctions, conflict_military_spending
-      Commodity: commodity_trade_flows, commodity_energy_series
-      Health: health_who_indicator, health_disease_outbreaks, health_disease_tracker, health_fda_adverse_events
-      Politics: politics_global_elections, politics_heads_of_state, politics_eu_parliament_meps,
-        politics_eu_parliament_votes, politics_us_representatives, politics_us_voter_info, politics_election_reports
-      Humanitarian: humanitarian_unhcr_population, humanitarian_hdx_search, humanitarian_reliefweb_reports
-      Transport: transport_flights_in_area, transport_flight_history, transport_vessels_in_area
-      Water: water_streamflow, water_drought
-      Infra: infra_internet_traffic, infra_ripe_probes
-      Most APIs are free/no-key. Optional keys: FRED, USDA NASS, ACLED, EIA,
-      Comtrade, Google Civic, AIS Stream, Cloudflare.
+      Trading signals server: store_* tools + 9 OSINT data domains.
+      STORE: Profile = what an entity IS (JSON on disk). Snapshot = what was MEASURED when (MongoDB timeseries).
+        store_chart returns Plotly HTML — output it directly as an artifact.
+        Notes (store_save_note etc.) are per-user — plans, watchlists, journals.
+        Risk gate: dry-run by default. Users enable live trading in Settings > Plugins.
+      DATA: Tools prefixed by domain (weather_, disaster_, econ_, agri_, conflict_,
+        commodity_, health_, politics_, transport_).
+        Most free/no-key. Some need optional keys (FRED, ACLED, EIA, etc.).
 
 # ── Endpoints ───────────────────────────────
 # Configure your LLM providers here or in .env

@@ -121,17 +121,17 @@ _do_install() {
     log "Registering services..."
     mkdir -p ~/etc/services.d ~/logs
 
-    # Domain servers (12) are spawned by LibreChat as stdio child processes —
-    # no supervisord entries needed. Only standalone services need registration.
-
-    # signals-store: autostart=false, for standalone testing outside LibreChat
-    cat > ~/etc/services.d/mcp-store.ini << SVCEOF
-[program:mcp-store]
+    # trading: combined MCP server (store + 12 domains) via streamable-http
+    # LibreChat connects to localhost:8071/mcp and injects per-user headers.
+    # Uses bash -c to source .env (which may contain MongoDB URIs with special chars)
+    # so we don't need to escape values for supervisord's environment= syntax.
+    cat > ~/etc/services.d/trading.ini << SVCEOF
+[program:trading]
 directory=${STACK}
-command=${STACK}/venv/bin/python src/store/server.py
-autostart=false
+command=bash -c 'set -a; [ -f ${STACK}/.env ] && . ${STACK}/.env; set +a; export MCP_TRANSPORT=streamable-http MCP_PORT=8071 PROFILES_DIR=${STACK}/profiles; exec ${STACK}/venv/bin/python src/servers/combined_server.py'
+autostart=true
 autorestart=true
-startsecs=60
+startsecs=10
 SVCEOF
 
     # charts: HTTP chart server, runs independently of LibreChat
@@ -145,7 +145,7 @@ startsecs=60
 SVCEOF
     # Register /charts route to chart server port
     uberspace web backend set /charts --http --port 8066 2>/dev/null || true
-    log "Services registered (mcp-store, charts)"
+    log "Services registered (trading, charts)"
 
     # ── 6. LibreChat — try release bundle, fall back to git clone + build ──
     local NEED_LC_SETUP=false
@@ -316,7 +316,6 @@ SVCEOF
 
     echo -e "  ${CYAN}Start:${NC}"
     echo "    supervisorctl start librechat"
-    echo "    supervisorctl start mcp-store"
     echo ""
     echo -e "  ${CYAN}Access:${NC}"
     echo "    https://${UBER}"
@@ -335,13 +334,15 @@ SVCEOF
 case "$CMD" in
     s|status)
         supervisorctl status librechat 2>/dev/null || echo "librechat: not registered"
-        supervisorctl status mcp-store 2>/dev/null || true
+        supervisorctl status trading 2>/dev/null || true
+        supervisorctl status charts 2>/dev/null || true
         echo -e "${CYAN}Version:${NC} $(cat "$APP/.version" 2>/dev/null || echo 'unknown')"
         echo -e "${CYAN}Host:${NC} ${UBER_HOST:-$(hostname -f 2>/dev/null || echo 'unknown')}"
         ;;
     r|restart)
         supervisorctl restart librechat
-        echo -e "${GREEN}✓${NC} Restarted"
+        supervisorctl restart trading 2>/dev/null || true
+        echo -e "${GREEN}✓${NC} Restarted (librechat + trading)"
         ;;
     l|logs)
         supervisorctl tail -f librechat
@@ -377,6 +378,7 @@ case "$CMD" in
 
         echo "$VER" > "$APP/.version"
         supervisorctl restart librechat 2>/dev/null || true
+        supervisorctl restart trading 2>/dev/null || true
         echo -e "${GREEN}✓${NC} Updated to ${VER} via git pull"
         ;;
     install)
@@ -729,7 +731,7 @@ SVCEOF
         echo ""
         echo -e "${CYAN}── Services ──${NC}"
         echo ""
-        for svc in librechat mcp-store charts cliproxyapi; do
+        for svc in librechat trading charts cliproxyapi; do
             SVC_STATUS="$(supervisorctl status "$svc" 2>/dev/null || true)"
             if [[ -z "$SVC_STATUS" ]]; then
                 _skip "$svc: not registered"

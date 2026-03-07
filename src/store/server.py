@@ -8,10 +8,14 @@ MongoDB: Per-kind timeseries collections with geo support:
 
 All docs share: ts (datetime), meta (entity, kind, region, type, source),
 data (payload), location (optional GeoJSON Point).
+
+When running behind LibreChat via streamable-http, X-User-ID / X-User-Email
+headers are injected per request and stored in snapshot/event meta.
 """
 from fastmcp import FastMCP
 from pymongo import MongoClient
 from pathlib import Path
+from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 import json
 import os
@@ -36,6 +40,23 @@ _RESERVED_DIRS = frozenset({"SCHEMAS"})
 SNAPSHOTS_TTL = 365 * 86400         # 1 year
 
 _SAFE_ID = re.compile(r'^[A-Za-z0-9_-]+$')
+
+
+# ── User context helper ──────────────────────────
+
+
+def _get_user_id() -> str:
+    """Return the LibreChat user ID from HTTP headers (streamable-http)
+    or LIBRECHAT_USER_ID env var (stdio fallback). Empty string if unavailable."""
+    try:
+        from fastmcp.server.dependencies import get_http_headers
+        headers = get_http_headers()
+        uid = headers.get("x-user-id", "")
+        if uid:
+            return uid
+    except (RuntimeError, ImportError):
+        pass
+    return os.environ.get("LIBRECHAT_USER_ID", "")
 
 
 # ── MongoDB helpers ───────────────────────────────
@@ -264,9 +285,7 @@ def _lint_one(kind: str, id: str, data: dict, schema: dict | None) -> list[str]:
 
 @mcp.tool()
 def get_profile(kind: str, id: str, region: str = "") -> dict:
-    """Read a profile. If region omitted, searches all regions.
-    kind: countries, stocks, etfs, crypto, indices, sources,
-    commodities, crops, materials, products, companies."""
+    """Read a profile. Searches all regions if region omitted."""
     if not _SAFE_ID.match(id):
         return {"error": f"invalid id: {id}"}
     if kind not in VALID_KINDS:
@@ -285,10 +304,7 @@ def get_profile(kind: str, id: str, region: str = "") -> dict:
 @mcp.tool()
 def put_profile(kind: str, id: str, data: dict,
                 region: str = "global") -> dict:
-    """Create or merge a profile. Shallow-merges with existing.
-    region: geographic folder (e.g. europe, north_america, global).
-    Defaults to 'global'. If profile already exists in another region,
-    updates it there instead."""
+    """Create or merge a profile. Shallow-merges with existing. Updates in-place if found in another region."""
     if not _SAFE_ID.match(id):
         return {"error": f"invalid id: {id}"}
     if kind not in VALID_KINDS:
@@ -312,8 +328,7 @@ def put_profile(kind: str, id: str, data: dict,
 
 @mcp.tool()
 def list_profiles(kind: str, region: str = "") -> list[dict]:
-    """List all profiles for a kind. Optionally filter by region.
-    Returns [{id, name, region}, ...]."""
+    """List profiles for a kind, optionally filtered by region."""
     if kind not in VALID_KINDS:
         return []
     regions_to_scan = [region] if region else _regions()
@@ -336,9 +351,7 @@ def list_profiles(kind: str, region: str = "") -> list[dict]:
 
 @mcp.tool()
 def find_profile(query: str, region: str = "") -> list[dict]:
-    """Find profiles by name, ID, or tag across all kinds and regions.
-    Case-insensitive partial match. Optionally filter by region.
-    Returns [{id, kind, name, region}, ...]."""
+    """Cross-kind search by name, ID, or tag. Case-insensitive partial match."""
     q = query.lower()
     index = _load_all_indexes()
     if not index:
@@ -358,8 +371,7 @@ def find_profile(query: str, region: str = "") -> list[dict]:
 @mcp.tool()
 def search_profiles(kind: str, field: str, value: str,
                     region: str = "") -> list[dict]:
-    """Search profiles by dot-path field (e.g. 'exposure.countries', 'tags').
-    Optionally filter by region."""
+    """Search by dot-path field value (e.g. field='exposure.countries', value='USA')."""
     results = []
     for entry in list_profiles(kind, region):
         prof = get_profile(kind, entry["id"])
@@ -383,7 +395,7 @@ def search_profiles(kind: str, field: str, value: str,
 
 @mcp.tool()
 def list_regions() -> list[dict]:
-    """List all geographic regions and the kinds they contain."""
+    """List geographic regions and their profile kinds."""
     result = []
     for region in _regions():
         rd = PROFILES / region
@@ -397,8 +409,7 @@ def list_regions() -> list[dict]:
 
 @mcp.tool()
 def rebuild_index(kind: str | None = None) -> dict:
-    """Force full rebuild of INDEX_{kind}.json from profile files on disk.
-    If kind given, rebuild only that kind. Otherwise rebuild all."""
+    """Rebuild INDEX files from disk. One kind if specified, else all."""
     if kind:
         entries = _rebuild_kind_index(kind)
         return {"status": "ok", "kind": kind, "entries": len(entries)}
@@ -408,9 +419,7 @@ def rebuild_index(kind: str | None = None) -> dict:
 
 @mcp.tool()
 def lint_profiles(kind: str | None = None, id: str | None = None) -> dict:
-    """Validate profiles against their schema. Check required fields and types.
-    If kind+id given, lint one. If only kind, lint all of that kind.
-    If neither, lint everything. Returns {ok: [...], issues: {id: [...]}}."""
+    """Validate profiles against schema. Scope: kind+id, kind only, or all."""
     results: dict = {"ok": [], "issues": {}}
     targets: list[tuple[str, str]] = []
     if kind and id:
@@ -446,19 +455,18 @@ def lint_profiles(kind: str | None = None, id: str | None = None) -> dict:
 def snapshot(kind: str, entity: str, type: str, data: dict,
              region: str = "", source: str = "", ts: str = "",
              lon: float | None = None, lat: float | None = None) -> dict:
-    """Store a timestamped snapshot. Goes into snap_{kind} collection.
-    kind: profile kind (stocks, countries, etc.).
-    entity: profile ID (e.g. 'DEU', 'AAPL').
-    type: data category (indicators, price, fundamentals).
-    region: geographic region key (same as profile region).
-    lon/lat: optional coordinates for geo queries."""
+    """Store a timestamped data point. type: indicators, price, fundamentals, etc."""
     if kind not in VALID_KINDS:
         return {"error": f"unknown kind: {kind}"}
     now = datetime.now(timezone.utc)
+    meta = {"entity": entity, "kind": kind, "region": region,
+            "type": type, "source": source}
+    uid = _get_user_id()
+    if uid:
+        meta["user_id"] = uid
     doc = {
         "ts": datetime.fromisoformat(ts) if ts else now,
-        "meta": {"entity": entity, "kind": kind, "region": region,
-                 "type": type, "source": source},
+        "meta": meta,
         "data": data,
     }
     if lon is not None and lat is not None:
@@ -473,20 +481,23 @@ def event(subtype: str, summary: str, data: dict,
           entities: list[str] | None = None, region: str = "",
           source: str = "", ts: str = "",
           lon: float | None = None, lat: float | None = None) -> dict:
-    """Log a signal event. severity: low, medium, high, critical.
-    region: geographic region key. lon/lat: optional coordinates."""
+    """Log a signal event. severity: low/medium/high/critical."""
     now = datetime.now(timezone.utc)
+    meta = {
+        "type": "event",
+        "subtype": subtype,
+        "severity": severity,
+        "region": region,
+        "countries": countries or [],
+        "entities": entities or [],
+        "source": source,
+    }
+    uid = _get_user_id()
+    if uid:
+        meta["user_id"] = uid
     doc = {
         "ts": datetime.fromisoformat(ts) if ts else now,
-        "meta": {
-            "type": "event",
-            "subtype": subtype,
-            "severity": severity,
-            "region": region,
-            "countries": countries or [],
-            "entities": entities or [],
-            "source": source,
-        },
+        "meta": meta,
         "summary": summary,
         "data": data,
     }
@@ -500,8 +511,7 @@ def event(subtype: str, summary: str, data: dict,
 def history(kind: str, entity: str, type: str = "",
             region: str = "", after: str = "", before: str = "",
             limit: int = 100) -> list[dict]:
-    """Get snapshot history for an entity. Newest first.
-    kind: profile kind. Optionally filter by region and time range."""
+    """Snapshot history for an entity. Newest first. after/before: ISO dates."""
     if kind not in VALID_KINDS:
         return [{"error": f"unknown kind: {kind}"}]
     q: dict = {"meta.entity": entity}
@@ -523,7 +533,7 @@ def history(kind: str, entity: str, type: str = "",
 def recent_events(subtype: str = "", severity: str = "",
                   region: str = "", countries: list[str] | None = None,
                   days: int = 30, limit: int = 50) -> list[dict]:
-    """Query recent events. Optionally filter by region."""
+    """Recent signal events, filtered by subtype/severity/region."""
     q: dict = {
         "ts": {"$gte": datetime.now(timezone.utc) - timedelta(days=days)},
     }
@@ -543,8 +553,7 @@ def recent_events(subtype: str = "", severity: str = "",
 def nearby(kind: str, lon: float, lat: float,
            max_km: float = 500, type: str = "",
            limit: int = 50) -> list[dict]:
-    """Find snapshots or events near a geographic point.
-    kind: profile kind or 'events'. max_km: search radius."""
+    """Geo proximity search. kind: profile kind or 'events'."""
     q: dict = {
         "location": {
             "$nearSphere": {
@@ -567,8 +576,7 @@ def nearby(kind: str, lon: float, lat: float,
 @mcp.tool()
 def trend(kind: str, entity: str, type: str, field: str,
           periods: int = 12) -> list[dict]:
-    """Extract a single field's trend over time.
-    field: key in data, e.g. 'gdp_growth_pct' or 'close'."""
+    """Extract a field's trend over time (e.g. field='gdp_growth_pct')."""
     if kind not in VALID_KINDS:
         return [{"error": f"unknown kind: {kind}"}]
     pipeline = [
@@ -605,8 +613,7 @@ def _has_blocked_stage(obj) -> bool:
 @mcp.tool()
 def aggregate(kind: str, pipeline: list[dict],
               archive: bool = False) -> list[dict]:
-    """Run a read-only MongoDB aggregation pipeline on a kind's collection.
-    kind: profile kind or 'events'. archive: query arch_{kind} instead."""
+    """Read-only MongoDB aggregation. kind: profile kind or 'events'."""
     if _has_blocked_stage(pipeline):
         return [{"error": "pipeline contains a blocked stage ($out, $merge, etc.)"}]
     if kind == "events":
@@ -633,9 +640,7 @@ Plotly.newPlot('c',{traces},{layout},{{responsive:true}});
 def chart(kind: str, entity: str, type: str, fields: list[str],
           periods: int = 24, archive: bool = False,
           chart_type: str = "line", title: str = "") -> str:
-    """Generate an interactive Plotly HTML chart from timeseries data.
-    kind: profile kind. entity: e.g. 'DEU'. type: e.g. 'indicators'.
-    fields: data keys to plot. chart_type: 'line', 'bar', 'scatter'."""
+    """Plotly HTML chart from timeseries. chart_type: line/bar/scatter. Output HTML directly as artifact."""
     if kind not in VALID_KINDS:
         return f"Unknown kind: {kind}"
     col = _arch_col(kind) if archive else _snap_col(kind)
@@ -684,15 +689,18 @@ def chart(kind: str, entity: str, type: str, fields: list[str],
 @mcp.tool()
 def archive_snapshot(kind: str, entity: str, type: str, data: dict,
                      region: str = "", source: str = "", ts: str = "") -> dict:
-    """Store a long-term snapshot in arch_{kind} (no TTL).
-    For historical macro data, yearly GDP, quarterly earnings, etc."""
+    """Long-term archive snapshot (no TTL). For historical/yearly data."""
     if kind not in VALID_KINDS:
         return {"error": f"unknown kind: {kind}"}
     now = datetime.now(timezone.utc)
+    meta = {"entity": entity, "kind": kind, "region": region,
+            "type": type, "source": source}
+    uid = _get_user_id()
+    if uid:
+        meta["user_id"] = uid
     doc = {
         "ts": datetime.fromisoformat(ts) if ts else now,
-        "meta": {"entity": entity, "kind": kind, "region": region,
-                 "type": type, "source": source},
+        "meta": meta,
         "data": data,
     }
     r = _arch_col(kind).insert_one(doc)
@@ -703,7 +711,7 @@ def archive_snapshot(kind: str, entity: str, type: str, data: dict,
 def archive_history(kind: str, entity: str, type: str = "",
                     region: str = "", after: str = "", before: str = "",
                     limit: int = 200) -> list[dict]:
-    """Query the kind's long-term archive. Optionally filter by region."""
+    """Query long-term archive for an entity."""
     if kind not in VALID_KINDS:
         return [{"error": f"unknown kind: {kind}"}]
     q: dict = {"meta.entity": entity}
@@ -724,8 +732,7 @@ def archive_history(kind: str, entity: str, type: str = "",
 @mcp.tool()
 def compact(kind: str, entity: str, type: str, older_than_days: int = 90,
             bucket: str = "month") -> dict:
-    """Downsample old snapshots into arch_{kind} by averaging numerics.
-    bucket: 'week', 'month', or 'quarter'."""
+    """Downsample old snapshots to archive. bucket: week/month/quarter."""
     if kind not in VALID_KINDS:
         return {"error": f"unknown kind: {kind}"}
     cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
@@ -814,6 +821,184 @@ def compact(kind: str, entity: str, type: str, older_than_days: int = 90,
         "bucket_size": bucket,
         "oldest": archive_docs[0]["ts"].isoformat(),
         "newest": archive_docs[-1]["ts"].isoformat(),
+    }
+
+
+# ── Per-user notes / plans ────────────────────────
+# Stored in MongoDB "user_notes" collection, keyed by user_id.
+# user_id comes from X-User-ID header (streamable-http) or env var.
+
+
+def _notes_col():
+    """Return the user_notes collection."""
+    return _db().user_notes
+
+
+@mcp.tool()
+def save_note(title: str, content: str, tags: list[str] | None = None,
+              kind: str = "note") -> dict:
+    """Save a personal note/plan/watchlist/journal (per-user)."""
+    uid = _get_user_id()
+    if not uid:
+        return {"error": "user not identified (X-User-ID header missing)"}
+    now = datetime.now(timezone.utc)
+    doc = {
+        "user_id": uid,
+        "kind": kind,
+        "title": title,
+        "content": content,
+        "tags": tags or [],
+        "created": now,
+        "updated": now,
+    }
+    r = _notes_col().insert_one(doc)
+    return {"id": str(r.inserted_id), "status": "ok"}
+
+
+@mcp.tool()
+def get_notes(kind: str = "", tag: str = "", limit: int = 50) -> list[dict]:
+    """List your notes. Filter by kind or tag."""
+    uid = _get_user_id()
+    if not uid:
+        return [{"error": "user not identified"}]
+    q: dict = {"user_id": uid}
+    if kind:
+        q["kind"] = kind
+    if tag:
+        q["tags"] = tag
+    rows = _notes_col().find(q).sort("updated", -1).limit(limit)
+    result = []
+    for r in rows:
+        r["_id"] = str(r["_id"])
+        for k in ("created", "updated"):
+            if isinstance(r.get(k), datetime):
+                r[k] = r[k].isoformat()
+        result.append(r)
+    return result
+
+
+@mcp.tool()
+def update_note(note_id: str, content: str = "", title: str = "",
+                tags: list[str] | None = None) -> dict:
+    """Update a note (owner only)."""
+    uid = _get_user_id()
+    if not uid:
+        return {"error": "user not identified"}
+    from bson import ObjectId
+    update: dict = {"updated": datetime.now(timezone.utc)}
+    if content:
+        update["content"] = content
+    if title:
+        update["title"] = title
+    if tags is not None:
+        update["tags"] = tags
+    r = _notes_col().update_one(
+        {"_id": ObjectId(note_id), "user_id": uid},
+        {"$set": update}
+    )
+    if r.matched_count == 0:
+        return {"error": "note not found or not owned by you"}
+    return {"status": "ok"}
+
+
+@mcp.tool()
+def delete_note(note_id: str) -> dict:
+    """Delete a note (owner only)."""
+    uid = _get_user_id()
+    if not uid:
+        return {"error": "user not identified"}
+    from bson import ObjectId
+    r = _notes_col().delete_one({"_id": ObjectId(note_id), "user_id": uid})
+    if r.deleted_count == 0:
+        return {"error": "note not found or not owned by you"}
+    return {"status": "ok"}
+
+
+# ── Per-user trading keys ─────────────────────────
+# Users provide their own API keys via LibreChat customUserVars.
+# Keys arrive as HTTP headers (e.g. X-Broker-Key) and are NOT stored server-side.
+
+
+def _get_user_key(header_name: str) -> str:
+    """Read a per-user API key from HTTP headers. Empty string if unavailable."""
+    try:
+        from fastmcp.server.dependencies import get_http_headers
+        headers = get_http_headers()
+        return headers.get(header_name.lower(), "")
+    except (RuntimeError, ImportError):
+        return ""
+
+
+# ── Risk gate ─────────────────────────────────────
+# All external trading actions (order placement, etc.) must pass through
+# this gate before executing. Settings come from:
+#   1. Per-user HTTP headers (set via LibreChat customUserVars UI):
+#      X-Risk-Daily-Limit, X-Risk-Live-Trading
+#   2. Server-wide env var fallbacks: RISK_DAILY_LIMIT (default 50)
+#
+# Enforces:
+#   - user must be identified
+#   - live trading must be explicitly enabled by user (default: dry_run)
+#   - per-user daily action limit (in-memory counter, resets on restart)
+
+
+_user_action_counts: dict[str, int] = defaultdict(int)
+_DAILY_ACTION_LIMIT_DEFAULT = int(os.environ.get("RISK_DAILY_LIMIT", "50"))
+
+
+def _get_user_risk_settings() -> dict:
+    """Read per-user risk settings from HTTP headers (customUserVars).
+    Falls back to server-wide defaults."""
+    limit_str = _get_user_key("x-risk-daily-limit")
+    live_str = _get_user_key("x-risk-live-trading")
+    try:
+        limit = int(limit_str) if limit_str else _DAILY_ACTION_LIMIT_DEFAULT
+    except ValueError:
+        limit = _DAILY_ACTION_LIMIT_DEFAULT
+    live_trading = live_str.lower() in ("yes", "true", "1") if live_str else False
+    return {"daily_limit": limit, "live_trading": live_trading}
+
+
+def _risk_check(action: str, params: dict,
+                dry_run: bool = True) -> dict | None:
+    """Validate a trading action before execution.
+    Returns None if approved, or an error dict if blocked.
+    User can override dry_run default via RISK_LIVE_TRADING customUserVar."""
+    uid = _get_user_id()
+    if not uid:
+        return {"error": "user not identified — cannot execute trading actions"}
+    settings = _get_user_risk_settings()
+    # If user enabled live trading via UI, use that; else respect dry_run param
+    effective_dry_run = dry_run and not settings["live_trading"]
+    if effective_dry_run:
+        return {"blocked": "dry_run",
+                "action": action, "params": params,
+                "message": "Set dry_run=False or enable live trading in Settings > Plugins"}
+    limit = settings["daily_limit"]
+    if _user_action_counts[uid] >= limit:
+        return {"error": f"daily action limit ({limit}) reached",
+                "user_id": uid, "action": action}
+    _user_action_counts[uid] += 1
+    return None
+
+
+@mcp.tool()
+def risk_status() -> dict:
+    """Risk gate status: live trading, actions used today, daily limit."""
+    uid = _get_user_id()
+    if not uid:
+        return {"error": "user not identified"}
+    settings = _get_user_risk_settings()
+    broker = _get_user_key("x-broker-name")
+    has_key = bool(_get_user_key("x-broker-key"))
+    return {
+        "user_id": uid,
+        "broker": broker or "(not set)",
+        "broker_key_set": has_key,
+        "live_trading": settings["live_trading"],
+        "actions_today": _user_action_counts[uid],
+        "daily_limit": settings["daily_limit"],
+        "remaining": max(0, settings["daily_limit"] - _user_action_counts[uid]),
     }
 
 

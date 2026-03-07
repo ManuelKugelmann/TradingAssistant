@@ -17,7 +17,6 @@ teardown() {
     [[ -n "$UBER_USER" ]]
     [[ -n "$UBER_HOST" ]]
     [[ -n "$GH_USER" ]]
-    [[ -n "$GH_REPO_STACK" ]]
     [[ -n "$GH_REPO" ]]
     [[ -n "$GH_REPO_DATA" ]]
     [[ -n "$STACK_DIR" ]]
@@ -46,12 +45,11 @@ teardown() {
     [[ "$NODE_VERSION" == "20" ]]
 }
 
-@test "deploy.conf GH_REPO defaults to GH_REPO_STACK" {
+@test "deploy.conf GH_REPO defaults to TradingAssistant" {
     unset GH_REPO
-    unset GH_REPO_STACK
     source "$REPO_ROOT/deploy.conf"
 
-    [[ "$GH_REPO" == "$GH_REPO_STACK" ]]
+    [[ "$GH_REPO" == "TradingAssistant" ]]
 }
 
 @test "deploy.conf passes bash syntax check" {

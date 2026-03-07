@@ -214,26 +214,43 @@ Single collection `signals.snapshots`, discriminated by `type` field.
 
 ---
 
-## FastMCP Tools (11 total)
+## One MCP Server, 20 Tools
 
-### Profile Tools (file-backed)
+The signals store is a **single FastMCP server** (`src/store/server.py`) that exposes 20 tools. LibreChat sees it as one MCP server entry in `librechat.yaml` — all profile management, snapshot storage, querying, charting, and archival are tools within that one server.
 
-| Tool | Description |
-|------|-------------|
-| `get_profile(kind, id)` | Read a profile. kind: countries, stocks, etfs, crypto, indices, sources |
-| `put_profile(kind, id, data)` | Create/merge profile fields |
-| `list_profiles(kind)` | List all IDs for a kind |
-| `search_profiles(kind, field, value)` | Search by dot-path field (e.g. `exposure.countries`, `tags`) |
-
-### Snapshot Tools (Atlas-backed)
+### Profile Tools (8 tools, file-backed)
 
 | Tool | Description |
 |------|-------------|
-| `snapshot(entity, type, data, ...)` | Store timestamped reading (indicators, price, fundamentals) |
+| `get_profile(kind, id, region?)` | Read a profile (scans all regions if omitted) |
+| `put_profile(kind, id, data, region?)` | Create/merge profile fields |
+| `list_profiles(kind, region?)` | List profiles, optionally by region |
+| `find_profile(query, region?)` | Cross-kind search by name/ID/tag |
+| `search_profiles(kind, field, value, region?)` | Field-level search by dot-path |
+| `list_regions()` | List regions and their kinds |
+| `rebuild_index(kind?)` | Rebuild INDEX files from disk |
+| `lint_profiles(kind?, id?)` | Validate profiles against schema |
+
+### Snapshot Tools (9 tools, Atlas-backed)
+
+| Tool | Description |
+|------|-------------|
+| `snapshot(kind, entity, type, data, ...)` | Store timestamped reading |
 | `event(subtype, summary, data, ...)` | Log signal event with severity + cross-refs |
-| `history(entity, type, after, before)` | Get snapshot series for an entity |
-| `recent_events(subtype, severity, countries, days)` | Query recent events |
-| `trend(entity, type, field, periods)` | Extract single field trend over time |
+| `history(kind, entity, type?, after?, before?)` | Query snapshot series |
+| `recent_events(subtype?, severity?, region?, ...)` | Query recent events |
+| `trend(kind, entity, type, field, periods?)` | Extract single field trend over time |
+| `nearby(kind, lon, lat, max_km?, type?)` | Geo proximity search (2dsphere) |
+| `aggregate(kind, pipeline, archive?)` | Raw MongoDB aggregation pipeline |
+| `chart(kind, entity, type, fields, ...)` | Generate Plotly chart |
+
+### Archive Tools (3 tools, Atlas-backed)
+
+| Tool | Description |
+|------|-------------|
+| `archive_snapshot(kind, entity, type, data, ...)` | Long-term storage in arch_{kind} |
+| `archive_history(kind, entity, type?, ...)` | Query archive |
+| `compact(kind, entity, type, older_than_days?)` | Downsample snapshots to archive |
 
 ---
 
