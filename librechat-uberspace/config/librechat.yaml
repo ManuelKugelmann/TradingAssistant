@@ -213,18 +213,115 @@ mcpServers:
 #       directEndpoint: true
 #       summarize: false
 
-# ── OpenRouter ──
+# ── Free LLM Endpoints ──────────────────────
+# All services below offer free API tiers (rate-limited).
+# Get keys at the URLs shown, then uncomment the block.
+# Multiple custom endpoints can coexist under one `endpoints.custom` list.
+#
 # endpoints:
 #   custom:
+#
+#     # ── Groq (free, very fast inference) ──
+#     # Key: https://console.groq.com/keys
+#     - name: "Groq"
+#       apiKey: "${GROQ_API_KEY}"
+#       baseURL: "https://api.groq.com/openai/v1"
+#       models:
+#         default:
+#           - llama-3.3-70b-versatile
+#           - llama-3.1-8b-instant
+#           - mixtral-8x7b-32768
+#           - gemma2-9b-it
+#         fetch: true
+#       titleConvo: true
+#       titleModel: "llama-3.1-8b-instant"
+#       modelDisplayLabel: "Groq"
+#
+#     # ── Google Gemini (free tier, 15 RPM / 1M TPD) ──
+#     # Key: https://aistudio.google.com/apikey
+#     - name: "Gemini"
+#       apiKey: "${GEMINI_API_KEY}"
+#       baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+#       models:
+#         default:
+#           - gemini-2.0-flash
+#           - gemini-2.0-flash-lite
+#           - gemini-1.5-flash
+#         fetch: false
+#       titleConvo: true
+#       titleModel: "gemini-2.0-flash-lite"
+#       modelDisplayLabel: "Gemini"
+#
+#     # ── xAI / Grok (free tier, 30 RPM) ──
+#     # Key: https://console.x.ai
+#     - name: "Grok"
+#       apiKey: "${XAI_API_KEY}"
+#       baseURL: "https://api.x.ai/v1"
+#       models:
+#         default:
+#           - grok-3-mini
+#           - grok-3-mini-fast
+#         fetch: true
+#       titleConvo: true
+#       titleModel: "grok-3-mini-fast"
+#       modelDisplayLabel: "Grok"
+#
+#     # ── Mistral (free tier: mistral-small, codestral) ──
+#     # Key: https://console.mistral.ai/api-keys
+#     - name: "Mistral"
+#       apiKey: "${MISTRAL_API_KEY}"
+#       baseURL: "https://api.mistral.ai/v1"
+#       models:
+#         default:
+#           - mistral-small-latest
+#           - codestral-latest
+#           - mistral-large-latest
+#         fetch: true
+#       titleConvo: true
+#       titleModel: "mistral-small-latest"
+#       modelDisplayLabel: "Mistral"
+#
+#     # ── Cerebras (free tier, fast inference) ──
+#     # Key: https://cloud.cerebras.ai
+#     - name: "Cerebras"
+#       apiKey: "${CEREBRAS_API_KEY}"
+#       baseURL: "https://api.cerebras.ai/v1"
+#       models:
+#         default:
+#           - llama-3.3-70b
+#           - llama-3.1-8b
+#         fetch: true
+#       titleConvo: true
+#       titleModel: "llama-3.1-8b"
+#       modelDisplayLabel: "Cerebras"
+#
+#     # ── HuggingFace Inference (free tier) ──
+#     # Key: https://huggingface.co/settings/tokens
+#     - name: "HuggingFace"
+#       apiKey: "${HF_API_KEY}"
+#       baseURL: "https://router.huggingface.co/v1"
+#       models:
+#         default:
+#           - Qwen/Qwen2.5-72B-Instruct
+#           - mistralai/Mistral-7B-Instruct-v0.3
+#           - meta-llama/Llama-3.3-70B-Instruct
+#         fetch: false
+#       titleConvo: true
+#       titleModel: "mistralai/Mistral-7B-Instruct-v0.3"
+#       modelDisplayLabel: "HuggingFace"
+#
+#     # ── OpenRouter (some free models with :free suffix) ──
+#     # Key: https://openrouter.ai/keys
 #     - name: "OpenRouter"
 #       apiKey: "${OPENROUTER_API_KEY}"
 #       baseURL: "https://openrouter.ai/api/v1"
 #       models:
 #         default:
-#           - "anthropic/claude-sonnet-4"
-#           - "openai/gpt-4o"
-#           - "google/gemini-2.0-flash"
+#           - "google/gemini-2.0-flash-exp:free"
+#           - "meta-llama/llama-3.3-70b-instruct:free"
+#           - "qwen/qwen-2.5-72b-instruct:free"
+#           - "mistralai/mistral-small-3.1-24b-instruct:free"
 #         fetch: false
 #       titleConvo: true
-#       titleModel: "google/gemini-2.0-flash"
+#       titleModel: "meta-llama/llama-3.3-70b-instruct:free"
 #       modelDisplayLabel: "OpenRouter"
