@@ -506,10 +506,33 @@ class TestRiskGate:
 
     def test_daily_limit_enforced(self, store, monkeypatch):
         monkeypatch.setenv("LIBRECHAT_USER_ID", "limit-user")
-        store._user_action_counts["limit-user"] = store._DAILY_ACTION_LIMIT
+        store._user_action_counts["limit-user"] = store._DAILY_ACTION_LIMIT_DEFAULT
         result = store._risk_check("buy", {"symbol": "AAPL"}, dry_run=False)
         assert result is not None
         assert "daily action limit" in result["error"]
+        store._user_action_counts.clear()
+
+    def test_live_trading_header_overrides_dry_run(self, store, monkeypatch):
+        """User enables live trading in UI → dry_run=True is overridden."""
+        monkeypatch.setenv("LIBRECHAT_USER_ID", "live-user")
+        store._user_action_counts.clear()
+        fake_headers = {"x-user-id": "live-user", "x-risk-live-trading": "yes"}
+        deps = sys.modules["fastmcp.server.dependencies"]
+        monkeypatch.setattr(deps, "get_http_headers", lambda: fake_headers)
+        result = store._risk_check("buy", {"symbol": "AAPL"}, dry_run=True)
+        assert result is None  # live_trading overrides dry_run
+        store._user_action_counts.clear()
+
+    def test_custom_daily_limit_from_header(self, store, monkeypatch):
+        """User sets a custom daily limit via UI."""
+        monkeypatch.setenv("LIBRECHAT_USER_ID", "custom-limit")
+        fake_headers = {"x-user-id": "custom-limit", "x-risk-daily-limit": "3"}
+        deps = sys.modules["fastmcp.server.dependencies"]
+        monkeypatch.setattr(deps, "get_http_headers", lambda: fake_headers)
+        store._user_action_counts["custom-limit"] = 3
+        result = store._risk_check("buy", {"symbol": "AAPL"}, dry_run=False)
+        assert result is not None
+        assert "daily action limit (3)" in result["error"]
         store._user_action_counts.clear()
 
     def test_risk_status_tool(self, store, monkeypatch):
@@ -517,5 +540,29 @@ class TestRiskGate:
         store._user_action_counts["status-user"] = 5
         result = store.risk_status()
         assert result["actions_today"] == 5
-        assert result["remaining"] == store._DAILY_ACTION_LIMIT - 5
+        assert result["daily_limit"] == store._DAILY_ACTION_LIMIT_DEFAULT
+        assert result["remaining"] == store._DAILY_ACTION_LIMIT_DEFAULT - 5
+        assert result["live_trading"] is False
+        assert result["broker_key_set"] is False
+        store._user_action_counts.clear()
+
+    def test_risk_status_with_broker(self, store, monkeypatch):
+        """Risk status shows broker info from headers."""
+        fake_headers = {
+            "x-user-id": "broker-user",
+            "x-broker-name": "alpaca",
+            "x-broker-key": "PKTEST123",
+            "x-risk-live-trading": "yes",
+            "x-risk-daily-limit": "10",
+        }
+        deps = sys.modules["fastmcp.server.dependencies"]
+        monkeypatch.setattr(deps, "get_http_headers", lambda: fake_headers)
+        store._user_action_counts["broker-user"] = 2
+        result = store.risk_status()
+        assert result["broker"] == "alpaca"
+        assert result["broker_key_set"] is True
+        assert result["live_trading"] is True
+        assert result["daily_limit"] == 10
+        assert result["actions_today"] == 2
+        assert result["remaining"] == 8
         store._user_action_counts.clear()

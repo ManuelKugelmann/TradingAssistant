@@ -957,31 +957,54 @@ def _get_user_key(header_name: str) -> str:
 
 # ── Risk gate ─────────────────────────────────────
 # All external trading actions (order placement, etc.) must pass through
-# this gate before executing. Currently enforces:
+# this gate before executing. Settings come from:
+#   1. Per-user HTTP headers (set via LibreChat customUserVars UI):
+#      X-Risk-Daily-Limit, X-Risk-Live-Trading
+#   2. Server-wide env var fallbacks: RISK_DAILY_LIMIT (default 50)
+#
+# Enforces:
 #   - user must be identified
-#   - action must be explicitly confirmed (dry_run default)
-#   - basic rate limiting per user (in-memory, resets on restart)
+#   - live trading must be explicitly enabled by user (default: dry_run)
+#   - per-user daily action limit (in-memory counter, resets on restart)
 
 
 from collections import defaultdict
 
 _user_action_counts: dict[str, int] = defaultdict(int)
-_DAILY_ACTION_LIMIT = int(os.environ.get("RISK_DAILY_LIMIT", "50"))
+_DAILY_ACTION_LIMIT_DEFAULT = int(os.environ.get("RISK_DAILY_LIMIT", "50"))
+
+
+def _get_user_risk_settings() -> dict:
+    """Read per-user risk settings from HTTP headers (customUserVars).
+    Falls back to server-wide defaults."""
+    limit_str = _get_user_key("x-risk-daily-limit")
+    live_str = _get_user_key("x-risk-live-trading")
+    try:
+        limit = int(limit_str) if limit_str else _DAILY_ACTION_LIMIT_DEFAULT
+    except ValueError:
+        limit = _DAILY_ACTION_LIMIT_DEFAULT
+    live_trading = live_str.lower() in ("yes", "true", "1") if live_str else False
+    return {"daily_limit": limit, "live_trading": live_trading}
 
 
 def _risk_check(action: str, params: dict,
                 dry_run: bool = True) -> dict | None:
     """Validate a trading action before execution.
-    Returns None if approved, or an error dict if blocked."""
+    Returns None if approved, or an error dict if blocked.
+    User can override dry_run default via RISK_LIVE_TRADING customUserVar."""
     uid = _get_user_id()
     if not uid:
         return {"error": "user not identified — cannot execute trading actions"}
-    if dry_run:
+    settings = _get_user_risk_settings()
+    # If user enabled live trading via UI, use that; else respect dry_run param
+    effective_dry_run = dry_run and not settings["live_trading"]
+    if effective_dry_run:
         return {"blocked": "dry_run",
                 "action": action, "params": params,
-                "message": "Set dry_run=False to execute for real"}
-    if _user_action_counts[uid] >= _DAILY_ACTION_LIMIT:
-        return {"error": f"daily action limit ({_DAILY_ACTION_LIMIT}) reached",
+                "message": "Set dry_run=False or enable live trading in Settings > Plugins"}
+    limit = settings["daily_limit"]
+    if _user_action_counts[uid] >= limit:
+        return {"error": f"daily action limit ({limit}) reached",
                 "user_id": uid, "action": action}
     _user_action_counts[uid] += 1
     return None
@@ -989,15 +1012,22 @@ def _risk_check(action: str, params: dict,
 
 @mcp.tool()
 def risk_status() -> dict:
-    """Show current user's risk gate status: actions used today, limit."""
+    """Show your risk gate status: live trading enabled, actions used, limit.
+    Settings are configured in LibreChat Settings > Plugins."""
     uid = _get_user_id()
     if not uid:
         return {"error": "user not identified"}
+    settings = _get_user_risk_settings()
+    broker = _get_user_key("x-broker-name")
+    has_key = bool(_get_user_key("x-broker-key"))
     return {
         "user_id": uid,
+        "broker": broker or "(not set)",
+        "broker_key_set": has_key,
+        "live_trading": settings["live_trading"],
         "actions_today": _user_action_counts[uid],
-        "daily_limit": _DAILY_ACTION_LIMIT,
-        "remaining": max(0, _DAILY_ACTION_LIMIT - _user_action_counts[uid]),
+        "daily_limit": settings["daily_limit"],
+        "remaining": max(0, settings["daily_limit"] - _user_action_counts[uid]),
     }
 
 

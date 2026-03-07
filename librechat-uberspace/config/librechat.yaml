@@ -66,13 +66,25 @@ mcpServers:
       X-User-Email: "{{LIBRECHAT_USER_EMAIL}}"
       X-Broker-Key: "{{BROKER_API_KEY}}"
       X-Broker-Secret: "{{BROKER_API_SECRET}}"
+      X-Broker-Name: "{{BROKER_NAME}}"
+      X-Risk-Daily-Limit: "{{RISK_DAILY_LIMIT}}"
+      X-Risk-Live-Trading: "{{RISK_LIVE_TRADING}}"
     customUserVars:
       BROKER_API_KEY:
         title: "Broker API Key"
-        description: "Your trading broker API key (e.g. Alpaca, IBKR). Set in Settings > Plugins."
+        description: "Your trading broker API key (e.g. Alpaca, IBKR). Leave blank for OSINT-only mode."
       BROKER_API_SECRET:
         title: "Broker API Secret"
         description: "Your trading broker API secret. Never shared with other users."
+      BROKER_NAME:
+        title: "Broker Name"
+        description: "Your broker platform: alpaca, ibkr, binance, etc. Used to select the right API adapter."
+      RISK_DAILY_LIMIT:
+        title: "Daily Action Limit"
+        description: "Max trading actions per day (default: 50). Set lower for safety."
+      RISK_LIVE_TRADING:
+        title: "Enable Live Trading"
+        description: "Set to 'yes' to allow real trades. Leave blank for dry-run only (paper trading)."
     serverInstructions: |
       Combined trading server — 62 tools: signals store (19, store_* prefix) + 12 data domains (43 tools).
       STORE (store_*): Profiles + MongoDB snapshots for trading signals.
