@@ -29,14 +29,16 @@ All domain servers work partially without keys — tools that need a key return 
 ## LLM Provider Keys (LibreChat)
 
 Set in `~/LibreChat/.env` (not in the signals stack `.env`).
+Only one LLM key is needed. See **[docs/llm-keys.md](llm-keys.md)** for the full reference (15+ providers, free tiers, paid tiers, Claude Max subscription).
 
 | Variable | Service | Notes |
 |----------|---------|-------|
-| `OPENAI_API_KEY` | OpenAI | Direct API access |
-| `ANTHROPIC_API_KEY` | Anthropic | Direct API access |
-| `OPENROUTER_API_KEY` | OpenRouter | Multi-provider gateway (recommended) |
-
-Only one LLM key is needed. OpenRouter is recommended since it gives access to all major models through a single key.
+| `OPENAI_API_KEY` | OpenAI | Direct API access (paid) |
+| `ANTHROPIC_API_KEY` | Anthropic | Direct API access (paid) |
+| `OPENROUTER_API_KEY` | OpenRouter | Multi-provider gateway (free + paid) |
+| `GROQ_API_KEY` | Groq | Free tier, very fast |
+| `GEMINI_API_KEY` | Google Gemini | Free tier, large context |
+| `MISTRAL_API_KEY` | Mistral | Free tier, good for code |
 
 ## LibreChat Internal Secrets
 
