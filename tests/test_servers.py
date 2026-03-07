@@ -359,7 +359,14 @@ class TestConflictServer:
         assert params["event_date"] == "2024-01-01|"
 
     @pytest.mark.asyncio
-    async def test_sanctions_search(self):
+    async def test_sanctions_missing_key(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "OPENSANCTIONS_KEY", "")
+        result = await self.mod.search_sanctions("Putin")
+        assert result["error"] == "OPENSANCTIONS_API_KEY not set"
+
+    @pytest.mark.asyncio
+    async def test_sanctions_search(self, monkeypatch):
+        monkeypatch.setattr(self.mod, "OPENSANCTIONS_KEY", "test_key")
         resp = _mock_response({"results": []})
         patcher, client = _patch_httpx_get(resp)
         with patcher:

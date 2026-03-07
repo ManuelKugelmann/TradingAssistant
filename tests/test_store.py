@@ -6,8 +6,8 @@ without needing MongoDB. MongoDB-dependent snapshot tools are not tested here.
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -442,3 +442,132 @@ class TestValidKinds:
     def test_blocked_agg_stages(self, store):
         for stage in ("$out", "$merge", "$unionWith"):
             assert stage in store._BLOCKED_STAGES
+
+
+# ── Snapshot tools (mocked MongoDB) ─────────────
+
+
+class TestSnapshotTools:
+    """Tests for MongoDB-dependent snapshot tools using mocked pymongo."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        import server as store
+        self.store = store
+        store._client = None
+        store._cols_ready = set()
+        yield
+        store._client = None
+        store._cols_ready = set()
+
+    def test_snapshot_rejects_invalid_kind(self):
+        result = self.store.snapshot("badkind", "X", "price", {"close": 100})
+        assert "error" in result
+
+    def test_snapshot_inserts_doc(self, mock_mongo):
+        client, db = mock_mongo
+        mock_col = MagicMock()
+        mock_col.insert_one.return_value = MagicMock(inserted_id="abc123")
+        db.__getitem__ = MagicMock(return_value=mock_col)
+        self.store._client = client
+        self.store._cols_ready = {"snap_stocks", "snap_stocks_geo"}
+
+        result = self.store.snapshot("stocks", "AAPL", "price",
+                                     {"close": 150.0, "volume": 1_000_000})
+        assert result["status"] == "ok"
+        assert result["collection"] == "snap_stocks"
+        mock_col.insert_one.assert_called_once()
+        doc = mock_col.insert_one.call_args[0][0]
+        assert doc["meta"]["entity"] == "AAPL"
+        assert doc["data"]["close"] == 150.0
+
+    def test_snapshot_with_geo(self, mock_mongo):
+        client, db = mock_mongo
+        mock_col = MagicMock()
+        mock_col.insert_one.return_value = MagicMock(inserted_id="geo123")
+        db.__getitem__ = MagicMock(return_value=mock_col)
+        self.store._client = client
+        self.store._cols_ready = {"snap_countries", "snap_countries_geo"}
+
+        result = self.store.snapshot("countries", "DEU", "indicators",
+                                     {"gdp": 4.0}, lon=10.45, lat=51.16)
+        assert result["status"] == "ok"
+        doc = mock_col.insert_one.call_args[0][0]
+        assert doc["location"]["type"] == "Point"
+        assert doc["location"]["coordinates"] == [10.45, 51.16]
+
+    def test_event_inserts(self, mock_mongo):
+        client, db = mock_mongo
+        mock_col = MagicMock()
+        mock_col.insert_one.return_value = MagicMock(inserted_id="evt1")
+        db.__getitem__ = MagicMock(return_value=mock_col)
+        db.events = mock_col
+        self.store._client = client
+        self.store._cols_ready = {"events", "events_geo"}
+
+        result = self.store.event("earthquake", "Major earthquake in Turkey",
+                                  {"magnitude": 7.2}, severity="critical",
+                                  countries=["TUR"], region="mena")
+        assert result["status"] == "ok"
+        doc = mock_col.insert_one.call_args[0][0]
+        assert doc["meta"]["subtype"] == "earthquake"
+        assert doc["meta"]["severity"] == "critical"
+        assert doc["summary"] == "Major earthquake in Turkey"
+
+    def test_history_rejects_invalid_kind(self):
+        result = self.store.history("badkind", "X")
+        assert result[0]["error"]
+
+    def test_aggregate_blocks_write_stages(self, mock_mongo):
+        client, db = mock_mongo
+        self.store._client = client
+        self.store._cols_ready = {"snap_stocks", "snap_stocks_geo"}
+
+        for stage in ["$out", "$merge", "$unionWith"]:
+            result = self.store.aggregate("stocks", [{stage: "target"}])
+            assert result[0]["error"]
+            assert "blocked" in result[0]["error"]
+
+    def test_aggregate_rejects_invalid_kind(self):
+        result = self.store.aggregate("badkind", [{"$match": {}}])
+        assert result[0]["error"]
+
+    def test_archive_snapshot_rejects_invalid_kind(self):
+        result = self.store.archive_snapshot("badkind", "X", "type", {})
+        assert "error" in result
+
+    def test_archive_snapshot_inserts(self, mock_mongo):
+        client, db = mock_mongo
+        mock_col = MagicMock()
+        mock_col.insert_one.return_value = MagicMock(inserted_id="arch1")
+        db.__getitem__ = MagicMock(return_value=mock_col)
+        self.store._client = client
+        self.store._cols_ready = {"arch_countries"}
+
+        result = self.store.archive_snapshot("countries", "DEU", "indicators",
+                                             {"gdp": 3.8}, region="europe")
+        assert result["status"] == "ok"
+        assert result["collection"] == "arch_countries"
+
+    def test_compact_rejects_invalid_kind(self):
+        result = self.store.compact("badkind", "X", "price")
+        assert "error" in result
+
+    def test_compact_invalid_bucket(self, mock_mongo):
+        client, db = mock_mongo
+        mock_col = MagicMock()
+        db.__getitem__ = MagicMock(return_value=mock_col)
+        self.store._client = client
+        self.store._cols_ready = {"snap_stocks", "snap_stocks_geo"}
+
+        result = self.store.compact("stocks", "AAPL", "price", bucket="decade")
+        assert "error" in result
+        assert "invalid bucket" in result["error"]
+
+    def test_chart_rejects_invalid_kind(self):
+        result = self.store.chart("badkind", "X", "price", ["close"])
+        assert "Unknown kind" in result
+
+    def test_nearby_rejects_invalid_kind(self):
+        result = self.store.nearby("badkind", 10.0, 50.0)
+        assert result[0]["error"]
