@@ -193,6 +193,27 @@ mcpServers:
 # Configure your LLM providers here or in .env
 # Uncomment and adjust as needed:
 
+# ── Claude Max (subscription via CLIProxyAPI) ──
+# Requires: ta proxy setup + token in ~/.claude-auth.env
+# See docs/claude-token-wrapper.md for full setup guide.
+#
+# endpoints:
+#   custom:
+#     - name: "Claude Max"
+#       apiKey: "dummy"
+#       baseURL: "http://localhost:8317/v1"
+#       models:
+#         default:
+#           - claude-sonnet-4-6
+#           - claude-opus-4-6
+#           - claude-haiku-4-5-20251001
+#         fetch: false
+#       titleConvo: true
+#       titleModel: "claude-sonnet-4-6"
+#       directEndpoint: true
+#       summarize: false
+
+# ── OpenRouter ──
 # endpoints:
 #   custom:
 #     - name: "OpenRouter"
